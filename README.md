@@ -37,6 +37,7 @@ Atualmente a API só lê tabelas que já existem em outro sistema (o Protheus). 
 - **Fornecedor** (tabela `SA2070` — Fornecedores): `rec_no (R_E_C_N_O_), filial, codigo, loja, nome, nome_reduzido, cnpj_cpf, inscricao_estadual, endereco, bairro, municipio, estado, cep, ddd, telefone, contato, tipo, bloqueado`.
 - **SaldoEstoque** (tabela `SB2070` — Saldo Atual de Estoque): `rec_no (R_E_C_N_O_), filial, codigo_produto, local, saldo_atual, quantidade_empenhada, quantidade_reservada, quantidade_pedido_venda, quantidade_pedido_compra, custo_medio`.
 - **Produto** (tabela `SB1000` — Cadastro de Produtos): `rec_no (R_E_C_N_O_), filial, codigo, descricao, tipo, unidade_medida, grupo, local_padrao, ncm, peso_liquido, peso_bruto, codigo_barras, preco_venda, bloqueado`.
+- **TipoOperacao** (tabela `PA6000` — Tipos de Operação Financeira): `rec_no (R_E_C_N_O_), filial, codigo, descricao`. Usada apenas como apoio (join) no relatório `/financeiro/`, sem rota própria.
 
 Para todas:
 - Registros com `D_E_L_E_T_ = '*'` (exclusão lógica do Protheus) são sempre filtrados pela API, tanto na listagem quanto na busca por id.
@@ -111,8 +112,19 @@ Todos os endpoints são `GET` — não existem rotas `POST`, `PUT` ou `DELETE`.
 | GET    | `/saldos-estoque/{rec_no}`         | Obtém um saldo de estoque pelo `R_E_C_N_O_` |
 | GET    | `/produtos/`                       | Lista produtos (SB1000, filtra por filial/codigo/grupo) |
 | GET    | `/produtos/{rec_no}`               | Obtém um produto pelo `R_E_C_N_O_` |
+| GET    | `/financeiro/`                     | Relatório financeiro (réplica de `select_financeiro.sql`): títulos a pagar (SE2070) com fornecedor (SA2070) e descrição do tipo de operação (PA6000) |
 
 Parâmetros comuns de listagem: `skip`, `limit` (paginação), `order_by` (ex.: `nome` ou `-criado_em` para ordem decrescente) e filtros por campo (ex.: `?filial=01`).
+
+### `/financeiro/`
+
+Réplica, via SQLAlchemy, exatamente o `SELECT` de `select_financeiro.sql`: junta `SE2070` (títulos a pagar) com `SA2070` (fornecedor, join obrigatório — títulos sem fornecedor cadastrado na filial `"  "` não aparecem) e `PA6000` (tipo de operação, join opcional — `descricao_operacao` vem `null` quando não há correspondência). Aplica como regra de negócio fixa (não parametrizável via query string, pois assim está definida na consulta original):
+
+- Apenas títulos não excluídos (`D_E_L_E_T_ != '*'`);
+- `vencimento_real >= "20260301"`;
+- `tipo` fora de `PA`, `PR`, `NDF`.
+
+Suporta apenas paginação (`skip`, `limit`) — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
 
 ## Testes
 

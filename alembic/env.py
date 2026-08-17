@@ -17,7 +17,7 @@ target_metadata = Base.metadata
 
 # Tabelas mapeadas apenas para leitura, gerenciadas por sistemas externos (ex.: Protheus).
 # O Alembic nunca deve gerar CREATE/ALTER/DROP para elas, mesmo em --autogenerate.
-TABELAS_EXTERNAS = {"SE2070", "SA2070", "SB2070", "SB1000"}
+TABELAS_EXTERNAS = {"SE2070", "SA2070", "SB2070", "SB1000", "PA6000"}
 
 
 def include_object(object, name, type_, reflected, compare_to):

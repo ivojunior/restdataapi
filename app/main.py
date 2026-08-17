@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.routers import fornecedores, produtos, saldos_estoque, titulos_pagar
+from app.routers import financeiro, fornecedores, produtos, saldos_estoque, titulos_pagar
 
 app = FastAPI(
     title="RestDataAPI",
@@ -22,6 +22,7 @@ app.include_router(titulos_pagar.router)
 app.include_router(fornecedores.router)
 app.include_router(saldos_estoque.router)
 app.include_router(produtos.router)
+app.include_router(financeiro.router)
 
 
 @app.exception_handler(SQLAlchemyError)

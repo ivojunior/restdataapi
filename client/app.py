@@ -1,8 +1,14 @@
 """
-Cliente desktop para a RestDataAPI — Contas a Pagar (Protheus SE2070).
+Cliente desktop para a RestDataAPI — Relatório Financeiro (endpoint /financeiro).
 
 Exibe filtros, KPIs, quatro gráficos analíticos e exporta para Excel
-com quatro abas (dados, resumo, por fornecedor, por vencimento).
+com quatro abas (dados, resumo, por fornecedor, por tipo de operação).
+
+O endpoint /financeiro não aceita filtros via query string: os filtros de
+negócio (vencimento mínimo e tipos de título excluídos) já vêm fixos do
+servidor. Todos os filtros desta tela (filial, fornecedor, tipo, tipo de
+operação e período de vencimento) são aplicados no cliente, após o
+carregamento completo dos dados.
 
 Requisitos:  pip install requests matplotlib pandas openpyxl python-dotenv
 """
@@ -43,21 +49,19 @@ CHART_COLORS = [
 ]
 
 TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
-    ("rec_no",     "Rec",           60,  "e"),
-    ("filial",     "Filial",        55,  "c"),
-    ("prefixo",    "Prefixo",       60,  "c"),
-    ("numero",     "Número",        90,  "c"),
-    ("parcela",    "Parcela",       60,  "c"),
-    ("tipo",       "Tipo",          50,  "c"),
-    ("fornecedor", "Fornecedor",    80,  "c"),
-    ("loja",       "Loja",          45,  "c"),
-    ("emissao",    "Emissão",       85,  "c"),
-    ("vencimento", "Vencimento",    85,  "c"),
-    ("valor",      "Valor (R$)",   115,  "e"),
-    ("saldo",      "Saldo (R$)",   115,  "e"),
-    ("moeda",      "Moeda",         50,  "c"),
-    ("historico",  "Histórico",    220,  "w"),
-    ("status",     "Status",        85,  "c"),
+    ("filial",             "Filial",         55,  "c"),
+    ("numero",             "Número",         90,  "c"),
+    ("parcela",            "Parcela",        60,  "c"),
+    ("tipo",               "Tipo",           50,  "c"),
+    ("codigo_operacao",    "Cód. Op.",       65,  "c"),
+    ("descricao_operacao", "Tipo Operação", 150,  "w"),
+    ("nome_fornecedor",    "Fornecedor",    180,  "w"),
+    ("emissao",            "Emissão",        85,  "c"),
+    ("vencimento_real",    "Vencimento",     85,  "c"),
+    ("valor",              "Valor (R$)",    115,  "e"),
+    ("saldo",              "Saldo (R$)",    115,  "e"),
+    ("historico",          "Histórico",     200,  "w"),
+    ("status",             "Status",         85,  "c"),
 ]
 
 
@@ -101,7 +105,7 @@ def _status_from_row(row: Dict) -> str:
     baixa = (row.get("data_baixa") or "").strip()
     if baixa:
         return "Baixado"
-    vcto = (row.get("vencimento") or "").strip()
+    vcto = (row.get("vencimento_real") or "").strip()
     if vcto and vcto < TODAY:
         return "Vencido"
     return "Em aberto"
@@ -109,14 +113,15 @@ def _status_from_row(row: Dict) -> str:
 
 # ── aplicação principal ───────────────────────────────────────────────────────
 
-class ContasAPagarApp:
+class FinanceiroApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("Contas a Pagar — RestDataAPI")
-        self.root.geometry("1300x840")
-        self.root.minsize(960, 640)
+        self.root.title("Relatório Financeiro — RestDataAPI")
+        self.root.geometry("1340x860")
+        self.root.minsize(980, 640)
         self.root.configure(bg="#f0f2f5")
 
+        self._df_raw: Optional[pd.DataFrame] = None
         self._df: Optional[pd.DataFrame] = None
         self._loading = False
         self._sort_ascending: Dict[str, bool] = {}
@@ -194,21 +199,25 @@ class ContasAPagarApp:
         f.columnconfigure(1, weight=1)
         f.columnconfigure(3, weight=1)
 
-    # ── filtros ───────────────────────────────────────────────────────────────
+    # ── filtros (aplicados no cliente, após o carregamento) ────────────────────
 
     def _build_filter_frame(self) -> None:
-        f = ttk.LabelFrame(self.root, text="Filtros", padding=(10, 6))
+        f = ttk.LabelFrame(
+            self.root,
+            text="Filtros (aplicados localmente sobre os dados carregados)",
+            padding=(10, 6),
+        )
         f.pack(fill="x", padx=12, pady=3)
 
-        # linha 0 — filtros da API (server-side)
-        api_filters = [
-            ("Filial:",       "_f_filial",      5),
-            ("Fornecedor:",   "_f_fornecedor",  10),
-            ("Prefixo:",      "_f_prefixo",     6),
-            ("Número:",       "_f_numero",      12),
+        # linha 0 — filtros de texto
+        text_filters = [
+            ("Filial:",        "_f_filial",   6),
+            ("Fornecedor:",    "_f_forn",    18),
+            ("Tipo:",          "_f_tipo",     6),
+            ("Tipo Operação:", "_f_tipo_op", 18),
         ]
         col = 0
-        for label, attr, width in api_filters:
+        for label, attr, width in text_filters:
             ttk.Label(f, text=label).grid(
                 row=0, column=col, sticky="w", padx=(0 if col == 0 else 14, 3))
             var = tk.StringVar()
@@ -217,7 +226,7 @@ class ContasAPagarApp:
                 row=0, column=col + 1, sticky="ew")
             col += 2
 
-        # linha 1 — filtros de data (client-side)
+        # linha 1 — filtros de data
         ttk.Label(f, text="Vcto De:").grid(
             row=1, column=0, sticky="w", padx=(0, 3), pady=(6, 0))
         self._f_vcto_de = tk.StringVar()
@@ -236,8 +245,10 @@ class ContasAPagarApp:
         # botões
         btn = ttk.Frame(f)
         btn.grid(row=0, column=8, rowspan=2, sticky="e", padx=(20, 0))
-        ttk.Button(btn, text="  Consultar  ", style="Primary.TButton",
+        ttk.Button(btn, text=" Carregar da API ", style="Primary.TButton",
                    command=self.consultar).pack(side="left", padx=(0, 6))
+        ttk.Button(btn, text="Aplicar filtros", style="Secondary.TButton",
+                   command=self._on_filtros_alterados).pack(side="left", padx=(0, 6))
         ttk.Button(btn, text="Limpar", style="Secondary.TButton",
                    command=self.limpar).pack(side="left")
 
@@ -317,7 +328,7 @@ class ContasAPagarApp:
                 command=lambda c=col_id: self._sort_tree(c),
             )
             self._tree.column(col_id, width=width, anchor=anchor,
-                              stretch=(col_id == "historico"))
+                              stretch=(col_id in ("historico", "descricao_operacao")))
 
         self._tree.tag_configure("Em aberto", background="#eafaf1")
         self._tree.tag_configure("Vencido",   background="#fdecea")
@@ -375,27 +386,13 @@ class ContasAPagarApp:
             return
         self._loading = True
         self._clear_data()
-        self._set_status("Consultando a API…", indeterminate=True)
+        self._set_status("Consultando /financeiro na API…", indeterminate=True)
         threading.Thread(target=self._fetch_thread, daemon=True).start()
 
     def _fetch_thread(self) -> None:
         try:
             client = self._make_client()
-
-            server_filters: Dict[str, str] = {}
-            for attr, key in [
-                ("_f_filial",     "filial"),
-                ("_f_fornecedor", "fornecedor"),
-                ("_f_prefixo",    "prefixo"),
-                ("_f_numero",     "numero"),
-            ]:
-                v = getattr(self, attr).get().strip()
-                if v:
-                    server_filters[key] = v
-
-            items, total = client.get_all_titulos_pagar(
-                progress_callback=self._on_progress, **server_filters
-            )
+            items, total = client.get_all_financeiro(progress_callback=self._on_progress)
             self.root.after(0, self._on_data_ready, items, total)
         except Exception as exc:
             self.root.after(0, self._on_error, str(exc))
@@ -420,18 +417,14 @@ class ContasAPagarApp:
         if not df.empty:
             df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0.0)
             df["saldo"] = pd.to_numeric(df["saldo"], errors="coerce").fillna(0.0)
-            df = self._apply_date_filter(df)
 
-        self._df = df
-        self._update_kpis()
-        self._update_charts()
-        self._update_table()
+        self._df_raw = df
+        self._apply_filters_and_refresh()
 
-        n = len(df)
+        n = len(self._df) if self._df is not None else 0
         self._set_status(
             f"{n} título(s) exibido(s)"
-            + (f"  [total na API com esses filtros: {total_api}]"
-               if n != total_api else "")
+            + (f"  [total carregado da API: {total_api}]" if n != total_api else "")
         )
         self._progress["value"] = 100
         self._pct_var.set("100%")
@@ -444,15 +437,52 @@ class ContasAPagarApp:
         self._set_status(f"Erro: {msg}")
         messagebox.showerror("Erro ao consultar a API", msg)
 
-    # ── filtro de datas (client-side) ─────────────────────────────────────────
+    # ── filtros (client-side) ────────────────────────────────────────────────
 
-    def _apply_date_filter(self, df: pd.DataFrame) -> pd.DataFrame:
-        vcto_de  = _parse_date_input(self._f_vcto_de.get())
-        vcto_ate = _parse_date_input(self._f_vcto_ate.get())
+    def _on_filtros_alterados(self) -> None:
+        if self._df_raw is None:
+            messagebox.showinfo(
+                "Filtros", "Carregue os dados da API antes de aplicar filtros.")
+            return
+        self._apply_filters_and_refresh()
+        n = len(self._df) if self._df is not None else 0
+        self._set_status(f"{n} título(s) exibido(s) após filtros")
+
+    def _apply_filters_and_refresh(self) -> None:
+        df = self._df_raw
+        if df is None or df.empty:
+            self._df = df
+        else:
+            self._df = self._apply_filters(df)
+        self._update_kpis()
+        self._update_charts()
+        self._update_table()
+
+    def _apply_filters(self, df: pd.DataFrame) -> pd.DataFrame:
+        filial = self._f_filial.get().strip()
+        if filial:
+            df = df[df["filial"] == filial]
+
+        fornecedor = self._f_forn.get().strip().lower()
+        if fornecedor:
+            df = df[df["nome_fornecedor"].fillna("").str.lower().str.contains(fornecedor)]
+
+        tipo = self._f_tipo.get().strip().upper()
+        if tipo:
+            df = df[df["tipo"].fillna("").str.upper() == tipo]
+
+        tipo_op = self._f_tipo_op.get().strip().lower()
+        if tipo_op:
+            df = df[df["descricao_operacao"].fillna("").str.lower().str.contains(tipo_op)]
+
+        vcto_de = _parse_date_input(self._f_vcto_de.get())
         if vcto_de and len(vcto_de) == 8 and vcto_de.isdigit():
-            df = df[df["vencimento"] >= vcto_de]
+            df = df[df["vencimento_real"] >= vcto_de]
+
+        vcto_ate = _parse_date_input(self._f_vcto_ate.get())
         if vcto_ate and len(vcto_ate) == 8 and vcto_ate.isdigit():
-            df = df[df["vencimento"] <= vcto_ate]
+            df = df[df["vencimento_real"] <= vcto_ate]
+
         return df
 
     # ── KPIs ──────────────────────────────────────────────────────────────────
@@ -483,7 +513,7 @@ class ContasAPagarApp:
     def _draw_empty_charts(self) -> None:
         for ax in self._axes.flat:
             ax.clear()
-            ax.text(0.5, 0.5, "Sem dados — faça uma consulta",
+            ax.text(0.5, 0.5, "Sem dados — clique em \"Carregar da API\"",
                     ha="center", va="center", color="#aab7b8", fontsize=9)
             ax.set_facecolor("#f8f9fa")
             ax.axis("off")
@@ -499,7 +529,7 @@ class ContasAPagarApp:
             return
 
         ax_status, ax_forn = self._axes[0]
-        ax_mes,    ax_fil  = self._axes[1]
+        ax_mes,    ax_tipo = self._axes[1]
 
         brl_fmt = mticker.FuncFormatter(
             lambda x, _: f"R${x/1000:.0f}k" if abs(x) >= 1000 else f"R${x:.0f}"
@@ -524,7 +554,8 @@ class ContasAPagarApp:
 
         # ── Gráfico 2: barras horizontais — Top 10 Fornecedores por Saldo ─
         top10 = (
-            df.groupby("fornecedor")["saldo"]
+            df.assign(nome_fornecedor=df["nome_fornecedor"].fillna("(sem nome)"))
+            .groupby("nome_fornecedor")["saldo"]
             .sum()
             .nlargest(10)
             .sort_values(ascending=True)
@@ -551,7 +582,7 @@ class ContasAPagarApp:
 
         # ── Gráfico 3: barras — Saldo por Mês de Vencimento ───────────────
         df_open = df[df["status"] != "Baixado"].copy()
-        df_open["mes"] = df_open["vencimento"].str[:6]
+        df_open["mes"] = df_open["vencimento_real"].str[:6]
         by_month = (
             df_open.groupby("mes")["saldo"]
             .sum()
@@ -578,24 +609,33 @@ class ContasAPagarApp:
             Patch(color="#2980b9", label="A vencer"),
         ], fontsize=7, loc="upper left", framealpha=0.7)
 
-        # ── Gráfico 4: barras — Saldo por Filial ──────────────────────────
-        by_fil = (
-            df.groupby("filial")["saldo"]
+        # ── Gráfico 4: barras horizontais — Saldo por Tipo de Operação ────
+        by_tipo = (
+            df.assign(descricao_operacao=df["descricao_operacao"].fillna("(não informado)"))
+            .groupby("descricao_operacao")["saldo"]
             .sum()
-            .sort_values(ascending=False)
+            .nlargest(10)
+            .sort_values(ascending=True)
         )
-        ax_fil.bar(by_fil.index, by_fil.values,
-                   color=CHART_COLORS[:len(by_fil)], width=0.65, edgecolor="none")
-        ax_fil.set_title("Saldo Total por Filial",
-                         fontsize=9, fontweight="bold", pad=10)
-        ax_fil.set_ylabel("Saldo (R$)", fontsize=7)
-        ax_fil.tick_params(axis="x", labelsize=8)
-        ax_fil.tick_params(axis="y", labelsize=7)
-        ax_fil.yaxis.set_major_formatter(brl_fmt)
-        ax_fil.set_facecolor("#fafafa")
-        for i, (fil, val) in enumerate(by_fil.items()):
-            ax_fil.text(i, val * 1.01, _brl(val),
-                        ha="center", fontsize=7, color="#555")
+        bar_colors_tipo = CHART_COLORS[:len(by_tipo)]
+        hbars_tipo = ax_tipo.barh(
+            by_tipo.index, by_tipo.values,
+            color=bar_colors_tipo[::-1], height=0.65,
+            edgecolor="none",
+        )
+        ax_tipo.set_title("Saldo por Tipo de Operação",
+                          fontsize=9, fontweight="bold", pad=10)
+        ax_tipo.set_xlabel("Saldo (R$)", fontsize=7)
+        ax_tipo.tick_params(axis="y", labelsize=7)
+        ax_tipo.tick_params(axis="x", labelsize=6)
+        ax_tipo.xaxis.set_major_formatter(brl_fmt)
+        ax_tipo.set_facecolor("#fafafa")
+        for bar in hbars_tipo:
+            w = bar.get_width()
+            ax_tipo.text(
+                w * 1.01, bar.get_y() + bar.get_height() / 2,
+                _brl(w), va="center", fontsize=6, color="#555",
+            )
 
         self._canvas.draw()
 
@@ -612,19 +652,17 @@ class ContasAPagarApp:
         for _, row in df.iterrows():
             status = row.get("status", "")
             self._tree.insert("", "end", tags=(status,), values=(
-                row.get("rec_no", ""),
                 row.get("filial", ""),
-                row.get("prefixo", ""),
                 row.get("numero", ""),
                 row.get("parcela", ""),
                 row.get("tipo", ""),
-                row.get("fornecedor", ""),
-                row.get("loja", ""),
+                row.get("codigo_operacao", ""),
+                row.get("descricao_operacao", ""),
+                row.get("nome_fornecedor", ""),
                 _fmt_date(row.get("emissao")),
-                _fmt_date(row.get("vencimento")),
+                _fmt_date(row.get("vencimento_real")),
                 _brl(row.get("valor", 0)),
                 _brl(row.get("saldo", 0)),
-                row.get("moeda", ""),
                 row.get("historico", ""),
                 status,
             ))
@@ -635,7 +673,7 @@ class ContasAPagarApp:
         asc = not self._sort_ascending.get(col, False)
         self._sort_ascending[col] = asc
 
-        if col in ("valor", "saldo", "rec_no"):
+        if col in ("valor", "saldo"):
             self._df = self._df.sort_values(col, ascending=asc, na_position="last")
         else:
             self._df = self._df.sort_values(
@@ -658,8 +696,8 @@ class ContasAPagarApp:
         path = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
             filetypes=[("Excel Workbook", "*.xlsx"), ("Todos os arquivos", "*.*")],
-            title="Salvar planilha de Contas a Pagar",
-            initialfile=f"contas_pagar_{date.today().strftime('%Y%m%d')}.xlsx",
+            title="Salvar planilha do Relatório Financeiro",
+            initialfile=f"financeiro_{date.today().strftime('%Y%m%d')}.xlsx",
         )
         if not path:
             return
@@ -678,13 +716,15 @@ class ContasAPagarApp:
     # ── utilitários ───────────────────────────────────────────────────────────
 
     def limpar(self) -> None:
-        for attr in ("_f_filial", "_f_fornecedor", "_f_prefixo",
-                     "_f_numero", "_f_vcto_de", "_f_vcto_ate"):
+        for attr in ("_f_filial", "_f_forn", "_f_tipo", "_f_tipo_op",
+                     "_f_vcto_de", "_f_vcto_ate"):
             getattr(self, attr).set("")
-        self._clear_data()
+        if self._df_raw is not None:
+            self._apply_filters_and_refresh()
         self._set_status("Filtros limpos.")
 
     def _clear_data(self) -> None:
+        self._df_raw = None
         self._df = None
         for v in self._kpi_vars.values():
             v.set("—")
@@ -727,7 +767,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     RIGHT     = Alignment(horizontal="right",  vertical="center")
     LEFT      = Alignment(horizontal="left",   vertical="center")
     BRL       = '#,##0.00'
-    DATE_COLS = {"emissao", "vencimento_original", "vencimento", "data_baixa"}
+    DATE_COLS = {"emissao", "vencimento_real"}
     CURR_COLS = {"valor", "saldo"}
 
     def _hdr(ws, row, col, text):
@@ -738,29 +778,25 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         c.border = BORDER
         return c
 
-    # ── aba 1: Títulos a Pagar ────────────────────────────────────────────
+    # ── aba 1: Financeiro ──────────────────────────────────────────────────
     ws1 = wb.active
-    ws1.title = "Títulos a Pagar"
+    ws1.title = "Financeiro"
     ws1.freeze_panes = "A2"
 
     cols_aba1 = [
-        ("Rec No",          "rec_no",              9),
-        ("Filial",          "filial",              7),
-        ("Prefixo",         "prefixo",             9),
-        ("Número",          "numero",             13),
-        ("Parcela",         "parcela",             9),
-        ("Tipo",            "tipo",                7),
-        ("Fornecedor",      "fornecedor",         13),
-        ("Loja",            "loja",                7),
-        ("Emissão",         "emissao",            13),
-        ("Vcto Original",   "vencimento_original", 15),
-        ("Vencimento",      "vencimento",         13),
-        ("Valor (R$)",      "valor",              16),
-        ("Saldo (R$)",      "saldo",              16),
-        ("Moeda",           "moeda",               7),
-        ("Histórico",       "historico",          42),
-        ("Data Baixa",      "data_baixa",         13),
-        ("Status",          "status",             12),
+        ("Filial",         "filial",              7),
+        ("Número",         "numero",             13),
+        ("Parcela",        "parcela",             9),
+        ("Tipo",           "tipo",                7),
+        ("Cód. Operação",  "codigo_operacao",    12),
+        ("Tipo Operação",  "descricao_operacao", 26),
+        ("Fornecedor",     "nome_fornecedor",    30),
+        ("Emissão",        "emissao",            13),
+        ("Vencimento",     "vencimento_real",    13),
+        ("Valor (R$)",     "valor",              16),
+        ("Saldo (R$)",     "saldo",              16),
+        ("Histórico",      "historico",          42),
+        ("Status",         "status",             12),
     ]
 
     for ci, (heading, _, w) in enumerate(cols_aba1, 1):
@@ -795,7 +831,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     ws2.column_dimensions["A"].width = 28
     ws2.column_dimensions["B"].width = 22
 
-    ws2.cell(1, 1, "Resumo — Contas a Pagar").font = Font(
+    ws2.cell(1, 1, "Resumo — Relatório Financeiro").font = Font(
         bold=True, color="1A5276", size=14, name="Calibri")
     ws2.cell(2, 1, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}").font = Font(
         italic=True, size=9, color="7F8C8D", name="Calibri")
@@ -829,19 +865,20 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     # ── aba 3: Por Fornecedor ─────────────────────────────────────────────
     ws3 = wb.create_sheet("Por Fornecedor")
     by_forn = (
-        df.groupby("fornecedor", as_index=False)
-        .agg(qtd=("rec_no", "count"),
+        df.assign(nome_fornecedor=df["nome_fornecedor"].fillna("(sem nome)"))
+        .groupby("nome_fornecedor", as_index=False)
+        .agg(qtd=("numero", "count"),
              valor_total=("valor", "sum"),
              saldo_total=("saldo", "sum"))
         .sort_values("saldo_total", ascending=False)
     )
     hdrs3 = ["Fornecedor", "Qtd Títulos", "Valor Total (R$)", "Saldo Total (R$)"]
-    widths3 = [14, 14, 20, 20]
+    widths3 = [30, 14, 20, 20]
     for ci, (h, w) in enumerate(zip(hdrs3, widths3), 1):
         _hdr(ws3, 1, ci, h)
         ws3.column_dimensions[get_column_letter(ci)].width = w
     for ri, row in enumerate(by_forn.itertuples(index=False), 2):
-        ws3.cell(ri, 1, row.fornecedor)
+        ws3.cell(ri, 1, row.nome_fornecedor)
         ws3.cell(ri, 2, int(row.qtd))
         c3 = ws3.cell(ri, 3, float(row.valor_total))
         c3.number_format = BRL
@@ -851,32 +888,31 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
             for ci in range(1, 5):
                 ws3.cell(ri, ci).fill = ALT_FILL
 
-    # ── aba 4: Por Mês de Vencimento ─────────────────────────────────────
-    ws4 = wb.create_sheet("Por Vencimento")
-    df_open = df[df["status"] != "Baixado"].copy()
-    df_open["mes"] = df_open["vencimento"].str[:6]
-    by_mes = (
-        df_open.groupby("mes", as_index=False)
-        .agg(qtd=("rec_no", "count"), saldo=("saldo", "sum"))
-        .sort_values("mes")
+    # ── aba 4: Por Tipo de Operação ─────────────────────────────────────────
+    ws4 = wb.create_sheet("Por Tipo de Operação")
+    by_tipo = (
+        df.assign(descricao_operacao=df["descricao_operacao"].fillna("(não informado)"))
+        .groupby("descricao_operacao", as_index=False)
+        .agg(qtd=("numero", "count"),
+             valor_total=("valor", "sum"),
+             saldo_total=("saldo", "sum"))
+        .sort_values("saldo_total", ascending=False)
     )
-    hdrs4 = ["Mês/Ano", "Qtd Títulos", "Saldo (R$)", "Situação"]
-    widths4 = [12, 14, 20, 12]
+    hdrs4 = ["Tipo Operação", "Qtd Títulos", "Valor Total (R$)", "Saldo Total (R$)"]
+    widths4 = [26, 14, 20, 20]
     for ci, (h, w) in enumerate(zip(hdrs4, widths4), 1):
         _hdr(ws4, 1, ci, h)
         ws4.column_dimensions[get_column_letter(ci)].width = w
-    for ri, row in enumerate(by_mes.itertuples(index=False), 2):
-        label = f"{row.mes[4:6]}/{row.mes[:4]}"
-        sit = "Vencido" if row.mes < TODAY[:6] else "A vencer"
-        ws4.cell(ri, 1, label)
+    for ri, row in enumerate(by_tipo.itertuples(index=False), 2):
+        ws4.cell(ri, 1, row.descricao_operacao)
         ws4.cell(ri, 2, int(row.qtd))
-        c3 = ws4.cell(ri, 3, float(row.saldo))
+        c3 = ws4.cell(ri, 3, float(row.valor_total))
         c3.number_format = BRL
-        ws4.cell(ri, 4, sit)
-        fill = VENC_FILL if sit == "Vencido" else (ALT_FILL if ri % 2 == 0 else None)
-        if fill:
+        c4 = ws4.cell(ri, 4, float(row.saldo_total))
+        c4.number_format = BRL
+        if ri % 2 == 0:
             for ci in range(1, 5):
-                ws4.cell(ri, ci).fill = fill
+                ws4.cell(ri, ci).fill = ALT_FILL
 
     wb.save(path)
 
@@ -885,5 +921,5 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    ContasAPagarApp(root)
+    FinanceiroApp(root)
     root.mainloop()

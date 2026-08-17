@@ -26,44 +26,26 @@ class APIClient:
     def health(self) -> Dict:
         return self._get("/health")
 
-    def get_titulos_pagar_page(
-        self,
-        skip: int = 0,
-        limit: int = 200,
-        filial: Optional[str] = None,
-        fornecedor: Optional[str] = None,
-        prefixo: Optional[str] = None,
-        numero: Optional[str] = None,
-    ) -> Dict:
-        params: Dict[str, Any] = {"skip": skip, "limit": limit}
-        if filial:
-            params["filial"] = filial
-        if fornecedor:
-            params["fornecedor"] = fornecedor
-        if prefixo:
-            params["prefixo"] = prefixo
-        if numero:
-            params["numero"] = numero
-        return self._get("/titulos-pagar/", params)
+    def get_financeiro_page(self, skip: int = 0, limit: int = 200) -> Dict:
+        return self._get("/financeiro/", {"skip": skip, "limit": limit})
 
-    def get_all_titulos_pagar(
+    def get_all_financeiro(
         self,
-        filial: Optional[str] = None,
-        fornecedor: Optional[str] = None,
-        prefixo: Optional[str] = None,
-        numero: Optional[str] = None,
         progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Tuple[List[Dict], int]:
+        """Busca todas as páginas do relatório financeiro.
+
+        O endpoint /financeiro não aceita filtros de query string — os filtros
+        de negócio (vencimento mínimo e tipos excluídos) já vêm fixos do servidor;
+        qualquer filtro adicional (filial, fornecedor, tipo etc.) é aplicado no
+        cliente, após o carregamento completo dos dados.
+        """
         all_items: List[Dict] = []
         skip = 0
         limit = 200
 
         while True:
-            result = self.get_titulos_pagar_page(
-                skip=skip, limit=limit,
-                filial=filial, fornecedor=fornecedor,
-                prefixo=prefixo, numero=numero,
-            )
+            result = self.get_financeiro_page(skip=skip, limit=limit)
             items = result["items"]
             total = result["total"]
             all_items.extend(items)

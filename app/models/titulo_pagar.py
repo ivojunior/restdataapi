@@ -8,8 +8,8 @@ class TituloPagar(Base):
 
     Tabela gerenciada externamente pelo Protheus: nunca é criada/alterada por este
     projeto (veja a lista TABELAS_EXTERNAS em alembic/env.py). Datas (E2_EMISSAO,
-    E2_VENCTO, E2_VENCORI, E2_BAIXA) são strings "AAAAMMDD", conforme o padrão do
-    dicionário de dados do Protheus, e não colunas DATE reais.
+    E2_VENCTO, E2_VENCORI, E2_VENCREA, E2_BAIXA) são strings "AAAAMMDD", conforme o
+    padrão do dicionário de dados do Protheus, e não colunas DATE reais.
     """
 
     __tablename__ = "SE2070"
@@ -27,8 +27,11 @@ class TituloPagar(Base):
     emissao = Column("E2_EMISSAO", String(8))
     vencimento_original = Column("E2_VENCORI", String(8))
     vencimento = Column("E2_VENCTO", String(8))
+    vencimento_real = Column("E2_VENCREA", String(8))
     valor = Column("E2_VALOR", Numeric(18, 2))
     saldo = Column("E2_SALDO", Numeric(18, 2))
     moeda = Column("E2_MOEDA", String(2))
     historico = Column("E2_HIST", String(40))
     data_baixa = Column("E2_BAIXA", String(8))
+    codigo_operacao = Column("E2_YOPER", String(6))
+    nome_fornecedor = Column("E2_NOMFOR", String(40))
