@@ -34,7 +34,13 @@ def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
     # Sem isto, o traceback real do erro de banco era descartado silenciosamente
     # (o handler substitui o comportamento padrão do Starlette de logar exceções
     # não tratadas) — dificultando diagnosticar erros 500 reportados por clientes.
-    logger.exception("Erro de banco de dados em %s %s", request.method, request.url)
+    #
+    # Passa `exc` explicitamente em exc_info: handlers de exceção síncronos são
+    # executados pelo Starlette num thread de threadpool, onde sys.exc_info()
+    # (usado por logger.exception()) já não enxerga a exceção — sem isso o log
+    # sai como "NoneType: None" em vez do traceback real.
+    logger.error(
+        "Erro de banco de dados em %s %s", request.method, request.url, exc_info=exc)
     return JSONResponse(status_code=500, content={"detail": "Erro ao acessar o banco de dados"})
 
 
