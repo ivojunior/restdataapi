@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from app.models.fornecedor import Fornecedor
 from app.models.tipo_operacao import TipoOperacao
 from app.models.titulo_pagar import TituloPagar
@@ -37,8 +39,8 @@ def _titulo(**overrides):
         fornecedor="000123",
         loja="01",
         emissao="20260301",
-        vencimento="20260401",
-        vencimento_real="20260401",
+        vencimento=date.today().strftime("%Y%m%d"),
+        vencimento_real=date.today().strftime("%Y%m%d"),
         valor="1000.00",
         saldo="1000.00",
         moeda="01",
@@ -104,17 +106,59 @@ def test_tipos_excluidos_sao_ignorados(client, auth_headers, db_session):
     assert dados["items"][0]["numero"] == "000001"
 
 
-def test_vencimento_real_anterior_ao_minimo_e_ignorado(client, auth_headers, db_session):
+def test_sem_filtro_ignora_vencimento_anterior_a_hoje(client, auth_headers, db_session):
+    ontem = (date.today() - timedelta(days=1)).strftime("%Y%m%d")
     db_session.add_all(
         [
             _fornecedor(),
-            _titulo(numero="000001", vencimento_real="20260228"),
+            _titulo(numero="000001", vencimento_real=ontem),
         ]
     )
     db_session.commit()
 
     resposta = client.get("/financeiro/", headers=auth_headers)
     assert resposta.json()["total"] == 0
+
+
+def test_filtro_vencimento_de_via_query_string(client, auth_headers, db_session):
+    ontem = (date.today() - timedelta(days=1)).strftime("%Y%m%d")
+    hoje = date.today().strftime("%Y%m%d")
+    db_session.add_all(
+        [
+            _fornecedor(),
+            _titulo(numero="000001", vencimento_real=ontem),
+            _titulo(numero="000002", vencimento_real=hoje),
+        ]
+    )
+    db_session.commit()
+
+    resposta = client.get(f"/financeiro/?vencimento_de={ontem}", headers=auth_headers)
+    dados = resposta.json()
+    assert dados["total"] == 2
+
+    resposta = client.get(f"/financeiro/?vencimento_de={hoje}", headers=auth_headers)
+    dados = resposta.json()
+    assert dados["total"] == 1
+    assert dados["items"][0]["numero"] == "000002"
+
+
+def test_filtro_vencimento_ate_via_query_string(client, auth_headers, db_session):
+    hoje = date.today().strftime("%Y%m%d")
+    amanha = (date.today() + timedelta(days=1)).strftime("%Y%m%d")
+    db_session.add_all(
+        [
+            _fornecedor(),
+            _titulo(numero="000001", vencimento_real=hoje),
+            _titulo(numero="000002", vencimento_real=amanha),
+        ]
+    )
+    db_session.commit()
+
+    resposta = client.get(
+        f"/financeiro/?vencimento_de={hoje}&vencimento_ate={hoje}", headers=auth_headers)
+    dados = resposta.json()
+    assert dados["total"] == 1
+    assert dados["items"][0]["numero"] == "000001"
 
 
 def test_metodos_de_escrita_nao_existem(client, auth_headers):

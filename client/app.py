@@ -4,11 +4,14 @@ Cliente desktop para a RestDataAPI — Relatório Financeiro (endpoint /financei
 Exibe filtros, KPIs, gráficos analíticos, resumos por categoria/mês/filial
 (mesma visão de CONTAS_A_PAGAR_ANALISE.xlsx) e exporta tudo para Excel.
 
-O endpoint /financeiro não aceita filtros via query string: os filtros de
-negócio (vencimento mínimo e tipos de título excluídos) já vêm fixos do
-servidor. Todos os filtros desta tela (filial, fornecedor, tipo, tipo de
-operação, categoria e período de vencimento) são aplicados no cliente, após
-o carregamento completo dos dados.
+O endpoint /financeiro exclui sempre os tipos de título PA/PR/NDF (regra
+fixa). O período de vencimento (vencimento_de/vencimento_ate) é enviado à
+API como query string — os filtros "Vencimento De" e "Vencimento Até" já
+iniciam marcados com a data atual do sistema (mesmo padrão que a API assume
+quando o parâmetro não é enviado); o usuário pode alterar o período ou
+desmarcar antes de carregar. Os demais filtros desta tela (filial,
+fornecedor, tipo, tipo de operação e categoria) são aplicados no cliente,
+após o carregamento completo dos dados.
 
 A categoria de cada título não existe em nenhuma tabela do Protheus exposta
 pela API — é resolvida no cliente a partir de regras editáveis mantidas em
@@ -89,26 +92,6 @@ def _fmt_date(s) -> str:
     if len(s) == 8 and s.isdigit():
         return f"{s[6:8]}/{s[4:6]}/{s[:4]}"
     return s or "—"
-
-
-def _parse_date_input(s: str) -> str:
-    """Aceita DD/MM/AAAA ou AAAAMMDD; retorna AAAAMMDD para comparação."""
-    s = s.strip().replace("/", "").replace("-", "").replace(".", "")
-    if len(s) != 8 or not s.isdigit():
-        return s
-    # Tenta AAAAMMDD
-    try:
-        date(int(s[:4]), int(s[4:6]), int(s[6:8]))
-        return s
-    except ValueError:
-        pass
-    # Tenta DDMMAAAA
-    try:
-        d = date(int(s[4:8]), int(s[2:4]), int(s[:2]))
-        return d.strftime("%Y%m%d")
-    except ValueError:
-        pass
-    return s
 
 
 def _status_from_row(row: Dict) -> str:
@@ -193,6 +176,7 @@ class FinanceiroApp:
 
     def _build_ui(self) -> None:
         self._build_conn_frame()
+        self._build_periodo_frame()
         self._build_filter_frame()
         self._build_kpi_frame()
         self._build_toolbar()
@@ -221,6 +205,54 @@ class FinanceiroApp:
         f.columnconfigure(1, weight=1)
         f.columnconfigure(3, weight=1)
 
+    # ── período (define vencimento_de/vencimento_ate enviados à API) ───────────
+
+    def _build_periodo_frame(self) -> None:
+        f = ttk.LabelFrame(
+            self.root,
+            text="Período (define vencimento_de/vencimento_ate enviados à API — recarrega ao consultar)",
+            padding=(10, 6),
+        )
+        f.pack(fill="x", padx=12, pady=(8, 3))
+
+        # caixa de seleção liga/desliga o envio do parâmetro; o campo de
+        # calendário sempre contém uma data válida.
+        self._f_vcto_de_on = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            f, text="Vencimento De:", variable=self._f_vcto_de_on,
+            command=lambda: self._toggle_date_filter(
+                self._de_vcto_de, self._f_vcto_de_on),
+        ).grid(row=0, column=0, sticky="w", padx=(0, 3))
+        self._f_vcto_de = tk.StringVar()
+        self._de_vcto_de = DateEntry(
+            f, textvariable=self._f_vcto_de, width=10,
+            date_pattern="dd/mm/yyyy",
+            background="#1a5276", foreground="white", borderwidth=1,
+        )
+        self._de_vcto_de.set_date(date.today())
+        self._de_vcto_de.grid(row=0, column=1, sticky="w")
+
+        self._f_vcto_ate_on = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            f, text="Vencimento Até:", variable=self._f_vcto_ate_on,
+            command=lambda: self._toggle_date_filter(
+                self._de_vcto_ate, self._f_vcto_ate_on),
+        ).grid(row=0, column=2, sticky="w", padx=(14, 3))
+        self._f_vcto_ate = tk.StringVar()
+        self._de_vcto_ate = DateEntry(
+            f, textvariable=self._f_vcto_ate, width=10,
+            date_pattern="dd/mm/yyyy",
+            background="#1a5276", foreground="white", borderwidth=1,
+        )
+        self._de_vcto_ate.set_date(date.today())
+        self._de_vcto_ate.grid(row=0, column=3, sticky="w")
+
+        ttk.Label(
+            f,
+            text="(já iniciam na data de hoje, igual ao padrão da API; desmarque para não limitar)",
+            foreground="#7f8c8d",
+        ).grid(row=0, column=4, sticky="w", padx=(10, 0))
+
     # ── filtros (aplicados no cliente, após o carregamento) ────────────────────
 
     def _build_filter_frame(self) -> None:
@@ -231,7 +263,6 @@ class FinanceiroApp:
         )
         f.pack(fill="x", padx=12, pady=3)
 
-        # linha 0 — filtros de texto
         text_filters = [
             ("Filial:",        "_f_filial",   6),
             ("Fornecedor:",    "_f_forn",    18),
@@ -255,42 +286,11 @@ class FinanceiroApp:
             f, textvariable=self._f_categoria, width=20, state="readonly",
             values=["", *categorias.CATEGORIAS_CANONICAS],
         ).grid(row=0, column=col + 1, sticky="ew")
-
-        # linha 1 — filtros de data (calendário; caixa de seleção ativa o filtro,
-        # já que o campo de calendário sempre contém uma data válida)
-        self._f_vcto_de_on = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            f, text="Vcto De:", variable=self._f_vcto_de_on,
-            command=lambda: self._toggle_date_filter(
-                self._de_vcto_de, self._f_vcto_de_on),
-        ).grid(row=1, column=0, sticky="w", padx=(0, 3), pady=(6, 0))
-        self._f_vcto_de = tk.StringVar()
-        self._de_vcto_de = DateEntry(
-            f, textvariable=self._f_vcto_de, width=10,
-            date_pattern="dd/mm/yyyy",
-            background="#1a5276", foreground="white", borderwidth=1,
-        )
-        self._de_vcto_de.grid(row=1, column=1, sticky="w", pady=(6, 0))
-        self._de_vcto_de.configure(state="disabled")
-
-        self._f_vcto_ate_on = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            f, text="Vcto Até:", variable=self._f_vcto_ate_on,
-            command=lambda: self._toggle_date_filter(
-                self._de_vcto_ate, self._f_vcto_ate_on),
-        ).grid(row=1, column=2, sticky="w", padx=(14, 3), pady=(6, 0))
-        self._f_vcto_ate = tk.StringVar()
-        self._de_vcto_ate = DateEntry(
-            f, textvariable=self._f_vcto_ate, width=10,
-            date_pattern="dd/mm/yyyy",
-            background="#1a5276", foreground="white", borderwidth=1,
-        )
-        self._de_vcto_ate.grid(row=1, column=3, sticky="w", pady=(6, 0))
-        self._de_vcto_ate.configure(state="disabled")
+        col += 2
 
         # botões
         btn = ttk.Frame(f)
-        btn.grid(row=0, column=10, rowspan=2, sticky="e", padx=(20, 0))
+        btn.grid(row=0, column=col, sticky="e", padx=(20, 0))
         ttk.Button(btn, text=" Carregar da API ", style="Primary.TButton",
                    command=self.consultar).pack(side="left", padx=(0, 6))
         ttk.Button(btn, text="Aplicar filtros", style="Secondary.TButton",
@@ -298,7 +298,7 @@ class FinanceiroApp:
         ttk.Button(btn, text="Limpar", style="Secondary.TButton",
                    command=self.limpar).pack(side="left")
 
-        f.columnconfigure(10, weight=1)
+        f.columnconfigure(col, weight=1)
 
     @staticmethod
     def _toggle_date_filter(entry: DateEntry, enabled: tk.BooleanVar) -> None:
@@ -534,13 +534,34 @@ class FinanceiroApp:
             return
         self._loading = True
         self._clear_data()
-        self._set_status("Consultando /financeiro na API…", indeterminate=True)
-        threading.Thread(target=self._fetch_thread, daemon=True).start()
 
-    def _fetch_thread(self) -> None:
+        # DateEntry sempre contém uma data válida; converte DD/MM/AAAA -> AAAAMMDD.
+        vencimento_de = (
+            self._de_vcto_de.get_date().strftime("%Y%m%d")
+            if self._f_vcto_de_on.get() else None
+        )
+        vencimento_ate = (
+            self._de_vcto_ate.get_date().strftime("%Y%m%d")
+            if self._f_vcto_ate_on.get() else None
+        )
+
+        partes = []
+        if vencimento_de:
+            partes.append(f"de {self._f_vcto_de.get()}")
+        if vencimento_ate:
+            partes.append(f"até {self._f_vcto_ate.get()}")
+        periodo = " ".join(partes) if partes else "sem limite de período"
+        self._set_status(f"Consultando /financeiro na API… [{periodo}]", indeterminate=True)
+        threading.Thread(
+            target=self._fetch_thread, args=(vencimento_de, vencimento_ate), daemon=True
+        ).start()
+
+    def _fetch_thread(self, vencimento_de: Optional[str], vencimento_ate: Optional[str]) -> None:
         try:
             client = self._make_client()
-            items, total = client.get_all_financeiro(progress_callback=self._on_progress)
+            items, total = client.get_all_financeiro(
+                vencimento_de=vencimento_de, vencimento_ate=vencimento_ate,
+                progress_callback=self._on_progress)
             self.root.after(0, self._on_data_ready, items, total)
         except Exception as exc:
             self.root.after(0, self._on_error, str(exc))
@@ -638,15 +659,8 @@ class FinanceiroApp:
         if categoria:
             df = df[df["categoria"] == categoria]
 
-        if self._f_vcto_de_on.get():
-            vcto_de = _parse_date_input(self._f_vcto_de.get())
-            if vcto_de and len(vcto_de) == 8 and vcto_de.isdigit():
-                df = df[df["vencimento_real"] >= vcto_de]
-
-        if self._f_vcto_ate_on.get():
-            vcto_ate = _parse_date_input(self._f_vcto_ate.get())
-            if vcto_ate and len(vcto_ate) == 8 and vcto_ate.isdigit():
-                df = df[df["vencimento_real"] <= vcto_ate]
+        # período de vencimento já é filtrado no servidor (vencimento_de/vencimento_ate
+        # enviados em consultar()) — não é reaplicado aqui.
 
         return df
 
@@ -1025,12 +1039,10 @@ class FinanceiroApp:
     # ── utilitários ───────────────────────────────────────────────────────────
 
     def limpar(self) -> None:
+        # O período (Vencimento De/Até) fica fora deste botão: é enviado à API
+        # e só é reaplicado ao clicar em "Carregar da API" novamente.
         for attr in ("_f_filial", "_f_forn", "_f_tipo", "_f_tipo_op", "_f_categoria"):
             getattr(self, attr).set("")
-        self._f_vcto_de_on.set(False)
-        self._f_vcto_ate_on.set(False)
-        self._toggle_date_filter(self._de_vcto_de, self._f_vcto_de_on)
-        self._toggle_date_filter(self._de_vcto_ate, self._f_vcto_ate_on)
         if self._df_raw is not None:
             self._apply_filters_and_refresh()
         self._set_status("Filtros limpos.")

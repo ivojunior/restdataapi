@@ -26,18 +26,79 @@ class APIClient:
     def health(self) -> Dict:
         return self._get("/health")
 
-    def get_financeiro_page(self, skip: int = 0, limit: int = 200) -> Dict:
-        return self._get("/financeiro/", {"skip": skip, "limit": limit})
+    def get_financeiro_page(
+        self,
+        skip: int = 0,
+        limit: int = 200,
+        vencimento_de: Optional[str] = None,
+        vencimento_ate: Optional[str] = None,
+    ) -> Dict:
+        params: Dict[str, Any] = {"skip": skip, "limit": limit}
+        if vencimento_de:
+            params["vencimento_de"] = vencimento_de
+        if vencimento_ate:
+            params["vencimento_ate"] = vencimento_ate
+        return self._get("/financeiro/", params)
 
     def get_all_financeiro(
         self,
+        vencimento_de: Optional[str] = None,
+        vencimento_ate: Optional[str] = None,
         progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Tuple[List[Dict], int]:
         """Busca todas as páginas do relatório financeiro.
 
-        O endpoint /financeiro não aceita filtros de query string — os filtros
-        de negócio (vencimento mínimo e tipos excluídos) já vêm fixos do servidor;
-        qualquer filtro adicional (filial, fornecedor, tipo etc.) é aplicado no
+        O endpoint /financeiro exclui sempre os tipos de título PA/PR/NDF
+        (regra fixa). O período (vencimento_de/vencimento_ate) é
+        parametrizável — sem vencimento_de, a API assume a data atual do
+        sistema; sem vencimento_ate, não há limite superior. Qualquer outro
+        filtro (filial, fornecedor, tipo etc.) é aplicado no cliente, após o
+        carregamento completo dos dados.
+        """
+        all_items: List[Dict] = []
+        skip = 0
+        limit = 200
+
+        while True:
+            result = self.get_financeiro_page(
+                skip=skip, limit=limit,
+                vencimento_de=vencimento_de, vencimento_ate=vencimento_ate)
+            items = result["items"]
+            total = result["total"]
+            all_items.extend(items)
+            skip += len(items)
+
+            if progress_callback:
+                progress_callback(len(all_items), total)
+
+            if skip >= total or not items:
+                break
+
+        return all_items, total
+
+    def get_cargas_page(
+        self,
+        skip: int = 0,
+        limit: int = 200,
+        data_inicial: Optional[str] = None,
+    ) -> Dict:
+        params: Dict[str, Any] = {"skip": skip, "limit": limit}
+        if data_inicial:
+            params["data_inicial"] = data_inicial
+        return self._get("/cargas/", params)
+
+    def get_all_cargas(
+        self,
+        data_inicial: Optional[str] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> Tuple[List[Dict], int]:
+        """Busca todas as páginas do relatório de cargas.
+
+        O endpoint /cargas aplica sempre como regra fixa apenas itens não
+        excluídos e não cancelados; a data mínima (data_inicial) é
+        parametrizável — é o cliente quem decide a partir de qual data
+        consultar. Sem o parâmetro, a API traz cargas de qualquer data.
+        Qualquer outro filtro (filial, cliente, caminhão etc.) é aplicado no
         cliente, após o carregamento completo dos dados.
         """
         all_items: List[Dict] = []
@@ -45,7 +106,7 @@ class APIClient:
         limit = 200
 
         while True:
-            result = self.get_financeiro_page(skip=skip, limit=limit)
+            result = self.get_cargas_page(skip=skip, limit=limit, data_inicial=data_inicial)
             items = result["items"]
             total = result["total"]
             all_items.extend(items)

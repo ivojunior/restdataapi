@@ -38,6 +38,9 @@ Atualmente a API só lê tabelas que já existem em outro sistema (o Protheus). 
 - **SaldoEstoque** (tabela `SB2070` — Saldo Atual de Estoque): `rec_no (R_E_C_N_O_), filial, codigo_produto, local, saldo_atual, quantidade_empenhada, quantidade_reservada, quantidade_pedido_venda, quantidade_pedido_compra, custo_medio, valor_atual`.
 - **Produto** (tabela `SB1000` — Cadastro de Produtos): `rec_no (R_E_C_N_O_), filial, codigo, descricao, tipo, unidade_medida, grupo, local_padrao, conversao, ncm, peso_liquido, peso_bruto, codigo_barras, preco_venda, bloqueado`. Usada também como apoio (join) no relatório `/saldos-estoque/`.
 - **TipoOperacao** (tabela `PA6000` — Tipos de Operação Financeira): `rec_no (R_E_C_N_O_), filial, codigo, descricao`. Usada apenas como apoio (join) no relatório `/financeiro/`, sem rota própria.
+- **ItemCarga** (tabela `DAI070` — Itens de Carga): `rec_no (R_E_C_N_O_), filial, codigo, sequencia_carga, sequencia, data, pedido, cliente, loja, peso, nota_fiscal`. Tabela principal do relatório `/cargas/`.
+- **VeiculoCarga** (tabela `DAK070` — Veículos da Carga): `rec_no (R_E_C_N_O_), filial, codigo, sequencia_carga, caminhao, carreta, valor`. Usada apenas como apoio (join) no relatório `/cargas/`, sem rota própria.
+- **Cliente** (tabela `SA1070` — Clientes): `rec_no (R_E_C_N_O_), filial, codigo, loja, nome`. Usada apenas como apoio (join) no relatório `/cargas/`, sem rota própria.
 
 Para todas:
 - Registros com `D_E_L_E_T_ = '*'` (exclusão lógica do Protheus) são sempre filtrados pela API, tanto na listagem quanto na busca por id.
@@ -118,20 +121,25 @@ Todos os endpoints são `GET` — não existem rotas `POST`, `PUT` ou `DELETE`.
 | GET    | `/fornecedores/{rec_no}`           | Obtém um fornecedor pelo `R_E_C_N_O_` |
 | GET    | `/produtos/`                       | Lista produtos (SB1000, filtra por filial/codigo/grupo) |
 | GET    | `/produtos/{rec_no}`               | Obtém um produto pelo `R_E_C_N_O_` |
-| GET    | `/financeiro/`                     | Relatório financeiro (réplica de `select_financeiro.sql`): títulos a pagar (SE2070) com fornecedor (SA2070) e descrição do tipo de operação (PA6000) |
+| GET    | `/financeiro/`                     | Relatório financeiro (réplica de `select_financeiro.sql`): títulos a pagar (SE2070) com fornecedor (SA2070) e descrição do tipo de operação (PA6000); filtra por `vencimento_de`/`vencimento_ate` |
 | GET    | `/saldos-estoque/`                 | Relatório de saldo de estoque (baseado em `select_estoque_produtos.sql`): saldos (SB2070) com descrição e fator de conversão do produto (SB1000); filtra por `tipo_produto`/`local` |
+| GET    | `/cargas/`                         | Relatório de cargas (baseado em `select_cargas.sql`): itens de carga (DAI070) com veículo (DAK070) e nome do cliente (SA1070); filtra por `data_inicial` |
 
 Parâmetros comuns de listagem: `skip`, `limit` (paginação), `order_by` (ex.: `nome` ou `-criado_em` para ordem decrescente) e filtros por campo (ex.: `?filial=01`).
 
 ### `/financeiro/`
 
-Réplica, via SQLAlchemy, exatamente o `SELECT` de `select_financeiro.sql`: junta `SE2070` (títulos a pagar) com `SA2070` (fornecedor, join obrigatório — títulos sem fornecedor cadastrado na filial `"  "` não aparecem) e `PA6000` (tipo de operação, join opcional — `descricao_operacao` vem `null` quando não há correspondência). Aplica como regra de negócio fixa (não parametrizável via query string, pois assim está definida na consulta original):
+Baseado no `SELECT` de `select_financeiro.sql`: junta `SE2070` (títulos a pagar) com `SA2070` (fornecedor, join obrigatório — títulos sem fornecedor cadastrado na filial `"  "` não aparecem) e `PA6000` (tipo de operação, join opcional — `descricao_operacao` vem `null` quando não há correspondência). Aplica como regra de negócio fixa (sempre ativa):
 
 - Apenas títulos não excluídos (`D_E_L_E_T_ != '*'`);
-- `vencimento_real >= "20260301"`;
 - `tipo` fora de `PA`, `PR`, `NDF`.
 
-Suporta apenas paginação (`skip`, `limit`) — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
+Diferente da consulta original — que fixa o vencimento mínimo em `'20260301'` —, aqui o período **não é fixo**: é parametrizável via query string.
+
+- `vencimento_de` (opcional): filtra pelo vencimento real (`E2_VENCREA`, formato `AAAAMMDD`), trazendo apenas títulos com `vencimento_real >= vencimento_de`. Sem o parâmetro, assume a data atual do sistema (equivalente a `vencimento_de=<hoje>`).
+- `vencimento_ate` (opcional): filtra por `vencimento_real <= vencimento_ate`. Sem o parâmetro, não limita o vencimento máximo.
+
+Suporta apenas paginação (`skip`, `limit`) e os dois filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
 
 ### `/saldos-estoque/`
 
@@ -146,6 +154,40 @@ Diferente de `/financeiro/`, o tipo de produto e o armazém **não são fixos** 
 - `local` (opcional): filtra pelo armazém (`B2_LOCAL`), ex. `01` ou `20`. Sem o parâmetro, traz qualquer armazém.
 
 O campo `quantidade` replica `B2_QATU / B1_CONV` da consulta original (quantidade convertida pela unidade de medida do produto). Suporta apenas paginação (`skip`, `limit`) e os dois filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
+
+### `/cargas/`
+
+Baseado no `SELECT` de `select_cargas.sql`: junta `DAI070` (item de carga) com `DAK070` (veículo, join obrigatório por filial/código/sequência de carga) e `SA1070` (cliente, join obrigatório por filial/código/loja — itens sem cliente cadastrado não aparecem). Aplica como regra de negócio fixa (sempre ativa):
+
+- Apenas itens não excluídos (`D_E_L_E_T_ != '*'`);
+- Sequência de item diferente de `999999` (convenção do Protheus para item cancelado).
+
+Diferente da consulta original — que fixa a data mínima em `'20260801'` — aqui a data **não é fixa**: é parametrizável via query string, para que cada cliente/integração decida a partir de qual data quer consultar as cargas.
+
+- `data_inicial` (opcional): filtra pela data do item (`DAI_DATA`, formato `AAAAMMDD`), trazendo apenas cargas com `data >= data_inicial`. Sem o parâmetro, assume a data atual do sistema (equivalente a `data_inicial=<hoje>`).
+
+Suporta apenas paginação (`skip`, `limit`) e o filtro acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
+
+O client desktop deste endpoint é `client/app_cargas.py` (veja "Clients desktop" abaixo).
+
+## Clients desktop
+
+Além da API, o diretório `client/` traz aplicações desktop (Tkinter) que consomem os relatórios via `APIClient` (`client/api_client.py`), com filtros, KPIs, gráficos e exportação para Excel:
+
+| Script                     | Endpoint            | Observação |
+|-----------------------------|---------------------|------------|
+| `client/app.py`             | `/financeiro/`      | `vencimento_de`/`vencimento_ate` já iniciam marcados com a data atual (mesmo padrão da API); demais filtros são aplicados no cliente. |
+| `client/app_estoque.py`     | `/saldos-estoque/`  | `tipo_produto`/`local` resolvidos por um seletor de "Tipo de Estoque". |
+| `client/app_cargas.py`      | `/cargas/`          | `data_inicial` é opcional (a API assume a data atual quando ausente); o seletor de data desta tela já inicia na data de hoje, e o usuário pode trocá-la antes de consultar. |
+
+Para rodar:
+
+```bash
+cd client
+cp .env.example .env   # ajuste API_BASE_URL/API_KEY
+pip install -r requirements.txt
+python app_cargas.py
+```
 
 ## Testes
 

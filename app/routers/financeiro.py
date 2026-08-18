@@ -1,3 +1,6 @@
+from datetime import date
+from typing import Optional
+
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
@@ -17,15 +20,14 @@ router = APIRouter(
     dependencies=[Depends(verify_api_key)],
 )
 
-# Regras de negócio fixas do relatório (replicam select_financeiro.sql):
-# considera apenas títulos com vencimento real a partir desta data e exclui
-# os tipos de lançamento PA/PR/NDF.
-_VENCIMENTO_MINIMO = "20260301"
+# Regra de negócio fixa do relatório (réplica de select_financeiro.sql): exclui
+# os tipos de lançamento PA/PR/NDF. O período de vencimento não é mais fixo —
+# é parametrizável via query string (vencimento_de/vencimento_ate).
 _TIPOS_EXCLUIDOS = ("PA", "PR", "NDF")
 
 
-def _query_financeiro(db: Session):
-    return (
+def _query_financeiro(db: Session, vencimento_de: str, vencimento_ate: Optional[str]):
+    query = (
         db.query(TituloPagar, TipoOperacao.descricao)
         .join(
             Fornecedor,
@@ -46,19 +48,33 @@ def _query_financeiro(db: Session):
         )
         .filter(
             TituloPagar.deletado != "*",
-            TituloPagar.vencimento_real >= _VENCIMENTO_MINIMO,
+            TituloPagar.vencimento_real >= vencimento_de,
             TituloPagar.tipo.notin_(_TIPOS_EXCLUIDOS),
         )
     )
+    if vencimento_ate:
+        query = query.filter(TituloPagar.vencimento_real <= vencimento_ate)
+    return query
 
 
 @router.get("/", response_model=PaginatedResponse[FinanceiroRead])
 def listar_financeiro(
     skip: int = 0,
     limit: int = Query(50, le=200),
+    vencimento_de: Optional[str] = Query(
+        None,
+        description="Data mínima de vencimento, formato AAAAMMDD (E2_VENCREA >= vencimento_de). "
+        "Sem o parâmetro, assume a data atual do sistema.",
+    ),
+    vencimento_ate: Optional[str] = Query(
+        None,
+        description="Data máxima de vencimento, formato AAAAMMDD (E2_VENCREA <= vencimento_ate). "
+        "Sem o parâmetro, não limita o vencimento máximo.",
+    ),
     db: Session = Depends(get_db),
 ):
-    query = _query_financeiro(db)
+    data_de = vencimento_de or date.today().strftime("%Y%m%d")
+    query = _query_financeiro(db, data_de, vencimento_ate)
     total = query.count()
     # order_by aplicado apenas aqui (após o count()): o MSSQL exige ORDER BY
     # junto de OFFSET/LIMIT, mas não aceita ORDER BY dentro da subquery que o
