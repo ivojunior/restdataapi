@@ -92,11 +92,19 @@ docker compose exec api alembic upgrade head
 
 ## Autenticação
 
-Todas as rotas de dados exigem o header `X-API-Key` (nome configurável via `API_KEY_NAME`) com o valor definido em `API_KEY` no `.env`.
+Todas as rotas de dados exigem o header `X-API-Key` (nome configurável via `API_KEY_NAME`) com o valor definido em `API_KEY` no `.env`. A comparação é feita em tempo constante (`secrets.compare_digest`) para não vazar informação por diferença de tempo de resposta.
 
 ```bash
 curl -H "X-API-Key: SEU_VALOR_DE_API_KEY" http://localhost:8000/fornecedores/
 ```
+
+Opcionalmente, é possível cadastrar **múltiplas chaves nomeadas** (uma por cliente/integração) via `API_KEYS` no `.env`, no formato `cliente1:chave1,cliente2:chave2` — isso permite revogar o acesso de um cliente específico sem invalidar os demais. Quando `API_KEYS` não é definido, a API cai no `API_KEY` único (retrocompatibilidade).
+
+## Segurança para exposição externa
+
+- **Rate limiting**: todas as rotas têm um limite de requisições por IP (`RATE_LIMIT_DEFAULT` no `.env`, padrão `100/minute`), mitigando brute-force de API key e abuso acidental.
+- **Docs desabilitáveis**: `/docs`, `/redoc` e `/openapi.json` ficam públicos por padrão (sem exigir API Key) para facilitar o desenvolvimento local. Em qualquer ambiente exposto fora da rede interna, defina `DOCS_ENABLED=false` no `.env`.
+- Estas proteções não substituem TLS: se a API for acessada fora de uma rede/VPN confiável, coloque-a atrás de um reverse proxy com HTTPS, já que a API Key trafega em texto claro no header.
 
 ## Endpoints principais
 

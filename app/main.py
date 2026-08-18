@@ -3,7 +3,13 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 from sqlalchemy.exc import SQLAlchemyError
+
+from app.config import settings
 
 logger = logging.getLogger("restdataapi")
 
@@ -13,7 +19,20 @@ app = FastAPI(
     title="RestDataAPI",
     description="API REST para acesso a dados do Protheus.",
     version="1.0.0",
+    # Em ambientes expostos externamente, defina DOCS_ENABLED=false no .env
+    # para não publicar o schema completo da API sem exigir autenticação.
+    docs_url="/docs" if settings.docs_enabled else None,
+    redoc_url="/redoc" if settings.docs_enabled else None,
+    openapi_url="/openapi.json" if settings.docs_enabled else None,
 )
+
+# Limite de requisições por IP, aplicado a todas as rotas via SlowAPIMiddleware
+# (mitiga brute-force de API key e abuso/DoS acidental). Configurável via
+# RATE_LIMIT_DEFAULT no .env (padrão "100/minute").
+limiter = Limiter(key_func=get_remote_address, default_limits=[settings.rate_limit_default])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
