@@ -116,7 +116,7 @@ def _status_from_row(row: Dict) -> str:
 class FinanceiroApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("Relatório Financeiro — RestDataAPI")
+        self.root.title("Relatório Financeiro — Grupo LGH (sem o Broker)")
         self.root.geometry("1340x860")
         self.root.minsize(980, 640)
         self.root.configure(bg="#f0f2f5")

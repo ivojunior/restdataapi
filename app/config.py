@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     db_name: str = "master"
     db_user: str = "sa"
     db_password: str = ""
-    db_driver: str = "ODBC Driver 18 for SQL Server"
+    db_driver: str = "ODBC Driver 17 for SQL Server"
 
     api_key: str = "change-me"
     api_key_name: str = "X-API-Key"
