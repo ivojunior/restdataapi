@@ -78,6 +78,13 @@ def _qtd(v) -> str:
         return "—"
 
 
+def _qtd2(v) -> str:
+    try:
+        return f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        return "—"
+
+
 # ── aplicação principal ───────────────────────────────────────────────────────
 
 class EstoqueApp:
@@ -459,7 +466,7 @@ class EstoqueApp:
 
         self._kpi_vars["total_itens"].set(f'{len(df):,}'.replace(",", "."))
         self._kpi_vars["filiais"].set(f'{df["filial"].nunique():,}'.replace(",", "."))
-        self._kpi_vars["qtd_total"].set(_qtd(df["quantidade"].sum()))
+        self._kpi_vars["qtd_total"].set(_qtd2(df["quantidade"].sum()))
         self._kpi_vars["valor_total"].set(_brl(valor_total))
         self._kpi_vars["valor_medio"].set(_brl(valor_medio))
 
