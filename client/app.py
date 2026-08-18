@@ -1,16 +1,20 @@
 """
 Cliente desktop para a RestDataAPI — Relatório Financeiro (endpoint /financeiro).
 
-Exibe filtros, KPIs, quatro gráficos analíticos e exporta para Excel
-com quatro abas (dados, resumo, por fornecedor, por tipo de operação).
+Exibe filtros, KPIs, gráficos analíticos, resumos por categoria/mês/filial
+(mesma visão de CONTAS_A_PAGAR_ANALISE.xlsx) e exporta tudo para Excel.
 
 O endpoint /financeiro não aceita filtros via query string: os filtros de
 negócio (vencimento mínimo e tipos de título excluídos) já vêm fixos do
 servidor. Todos os filtros desta tela (filial, fornecedor, tipo, tipo de
-operação e período de vencimento) são aplicados no cliente, após o
-carregamento completo dos dados.
+operação, categoria e período de vencimento) são aplicados no cliente, após
+o carregamento completo dos dados.
 
-Requisitos:  pip install requests matplotlib pandas openpyxl python-dotenv
+A categoria de cada título não existe em nenhuma tabela do Protheus exposta
+pela API — é resolvida no cliente a partir de regras editáveis mantidas em
+categorias.xlsx (veja categorias.py).
+
+Requisitos:  pip install requests matplotlib pandas openpyxl python-dotenv tkcalendar
 """
 
 from __future__ import annotations
@@ -28,7 +32,9 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 import matplotlib.ticker as mticker
 import pandas as pd
+from tkcalendar import DateEntry
 
+import categorias
 from api_client import APIClient
 from config import API_BASE_URL, API_KEY, API_KEY_NAME
 
@@ -48,6 +54,9 @@ CHART_COLORS = [
     "#16a085", "#d35400", "#2c3e50", "#c0392b", "#1abc9c",
 ]
 
+CATEGORIA_COLORS: Dict[str, str] = dict(
+    zip(categorias.CATEGORIAS_CANONICAS, CHART_COLORS))
+
 TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
     ("filial",             "Filial",         55,  "c"),
     ("numero",             "Número",         90,  "c"),
@@ -56,6 +65,7 @@ TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
     ("codigo_operacao",    "Cód. Op.",       65,  "c"),
     ("descricao_operacao", "Tipo Operação", 150,  "w"),
     ("nome_fornecedor",    "Fornecedor",    180,  "w"),
+    ("categoria",          "Categoria",     140,  "w"),
     ("emissao",            "Emissão",        85,  "c"),
     ("vencimento_real",    "Vencimento",     85,  "c"),
     ("valor",              "Valor (R$)",    115,  "e"),
@@ -109,6 +119,18 @@ def _status_from_row(row: Dict) -> str:
     if vcto and vcto < TODAY:
         return "Vencido"
     return "Em aberto"
+
+
+def _mes_ano(vencimento_real) -> str:
+    """'AAAAMMDD' -> 'AAAAMM' (chave ordenável); vazio se a data for inválida."""
+    s = str(vencimento_real or "").strip()
+    return s[:6] if len(s) == 8 and s.isdigit() else ""
+
+
+def _fmt_mes(mes_ano) -> str:
+    """'AAAAMM' -> 'MM/AAAA', para exibição."""
+    s = str(mes_ano or "")
+    return f"{s[4:6]}/{s[:4]}" if len(s) == 6 else (s or "—")
 
 
 # ── aplicação principal ───────────────────────────────────────────────────────
@@ -226,25 +248,49 @@ class FinanceiroApp:
                 row=0, column=col + 1, sticky="ew")
             col += 2
 
-        # linha 1 — filtros de data
-        ttk.Label(f, text="Vcto De:").grid(
-            row=1, column=0, sticky="w", padx=(0, 3), pady=(6, 0))
+        ttk.Label(f, text="Categoria:").grid(
+            row=0, column=col, sticky="w", padx=(14, 3))
+        self._f_categoria = tk.StringVar()
+        ttk.Combobox(
+            f, textvariable=self._f_categoria, width=20, state="readonly",
+            values=["", *categorias.CATEGORIAS_CANONICAS],
+        ).grid(row=0, column=col + 1, sticky="ew")
+
+        # linha 1 — filtros de data (calendário; caixa de seleção ativa o filtro,
+        # já que o campo de calendário sempre contém uma data válida)
+        self._f_vcto_de_on = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            f, text="Vcto De:", variable=self._f_vcto_de_on,
+            command=lambda: self._toggle_date_filter(
+                self._de_vcto_de, self._f_vcto_de_on),
+        ).grid(row=1, column=0, sticky="w", padx=(0, 3), pady=(6, 0))
         self._f_vcto_de = tk.StringVar()
-        ttk.Entry(f, textvariable=self._f_vcto_de, width=12).grid(
-            row=1, column=1, sticky="w", pady=(6, 0))
+        self._de_vcto_de = DateEntry(
+            f, textvariable=self._f_vcto_de, width=10,
+            date_pattern="dd/mm/yyyy",
+            background="#1a5276", foreground="white", borderwidth=1,
+        )
+        self._de_vcto_de.grid(row=1, column=1, sticky="w", pady=(6, 0))
+        self._de_vcto_de.configure(state="disabled")
 
-        ttk.Label(f, text="Vcto Até:").grid(
-            row=1, column=2, sticky="w", padx=(14, 3), pady=(6, 0))
+        self._f_vcto_ate_on = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            f, text="Vcto Até:", variable=self._f_vcto_ate_on,
+            command=lambda: self._toggle_date_filter(
+                self._de_vcto_ate, self._f_vcto_ate_on),
+        ).grid(row=1, column=2, sticky="w", padx=(14, 3), pady=(6, 0))
         self._f_vcto_ate = tk.StringVar()
-        ttk.Entry(f, textvariable=self._f_vcto_ate, width=12).grid(
-            row=1, column=3, sticky="w", pady=(6, 0))
-
-        ttk.Label(f, text="(DD/MM/AAAA)", foreground="#7f8c8d").grid(
-            row=1, column=4, sticky="w", padx=(6, 0), pady=(6, 0))
+        self._de_vcto_ate = DateEntry(
+            f, textvariable=self._f_vcto_ate, width=10,
+            date_pattern="dd/mm/yyyy",
+            background="#1a5276", foreground="white", borderwidth=1,
+        )
+        self._de_vcto_ate.grid(row=1, column=3, sticky="w", pady=(6, 0))
+        self._de_vcto_ate.configure(state="disabled")
 
         # botões
         btn = ttk.Frame(f)
-        btn.grid(row=0, column=8, rowspan=2, sticky="e", padx=(20, 0))
+        btn.grid(row=0, column=10, rowspan=2, sticky="e", padx=(20, 0))
         ttk.Button(btn, text=" Carregar da API ", style="Primary.TButton",
                    command=self.consultar).pack(side="left", padx=(0, 6))
         ttk.Button(btn, text="Aplicar filtros", style="Secondary.TButton",
@@ -252,7 +298,11 @@ class FinanceiroApp:
         ttk.Button(btn, text="Limpar", style="Secondary.TButton",
                    command=self.limpar).pack(side="left")
 
-        f.columnconfigure(8, weight=1)
+        f.columnconfigure(10, weight=1)
+
+    @staticmethod
+    def _toggle_date_filter(entry: DateEntry, enabled: tk.BooleanVar) -> None:
+        entry.configure(state="normal" if enabled.get() else "disabled")
 
     # ── KPI cards ─────────────────────────────────────────────────────────────
 
@@ -308,6 +358,18 @@ class FinanceiroApp:
         self._nb.add(tab_dados, text="  Dados  ")
         self._build_data_tab(tab_dados)
 
+        tab_categoria = ttk.Frame(self._nb)
+        self._nb.add(tab_categoria, text="  Por Categoria  ")
+        self._build_categoria_tab(tab_categoria)
+
+        tab_evolucao = ttk.Frame(self._nb)
+        self._nb.add(tab_evolucao, text="  Evolução Mensal  ")
+        self._build_evolucao_tab(tab_evolucao)
+
+        tab_filial = ttk.Frame(self._nb)
+        self._nb.add(tab_filial, text="  Por Filial  ")
+        self._build_filial_tab(tab_filial)
+
     def _build_charts_tab(self, parent: ttk.Frame) -> None:
         self._fig = Figure(figsize=(13, 6), dpi=96, facecolor="#f0f2f5")
         self._axes = self._fig.subplots(2, 2)
@@ -343,6 +405,92 @@ class FinanceiroApp:
         hsb.grid(row=1, column=0, sticky="ew")
         parent.rowconfigure(0, weight=1)
         parent.columnconfigure(0, weight=1)
+
+    # ── abas de resumo (mesma visão de CONTAS_A_PAGAR_ANALISE.xlsx) ────────────
+
+    @staticmethod
+    def _build_summary_table(
+        parent: tk.Widget,
+        cols: List[Tuple[str, str, int, str]],
+        height: int = 8,
+    ) -> ttk.Treeview:
+        frame = ttk.Frame(parent)
+        frame.pack(fill="x", padx=4, pady=(4, 2))
+
+        col_ids = [c[0] for c in cols]
+        tree = ttk.Treeview(frame, columns=col_ids, show="headings",
+                            selectmode="none", height=height)
+        for col_id, heading, width, anchor in cols:
+            tree.heading(col_id, text=heading)
+            tree.column(col_id, width=width, anchor=anchor, stretch=True)
+        tree.tag_configure("total", background="#eaf2f8", font=("Segoe UI", 9, "bold"))
+
+        vsb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=vsb.set)
+        tree.pack(side="left", fill="x", expand=True)
+        vsb.pack(side="right", fill="y")
+        return tree
+
+    @staticmethod
+    def _build_summary_chart(parent: tk.Widget, figsize=(13, 4.2)):
+        frame = ttk.Frame(parent)
+        frame.pack(fill="both", expand=True, padx=4, pady=(2, 4))
+        fig = Figure(figsize=figsize, dpi=96, facecolor="#f0f2f5")
+        ax = fig.add_subplot(111)
+        fig.subplots_adjust(left=0.22, right=0.96, top=0.90, bottom=0.12)
+        canvas = FigureCanvasTkAgg(fig, master=frame)
+        canvas.get_tk_widget().pack(fill="both", expand=True)
+        return fig, ax, canvas
+
+    @staticmethod
+    def _draw_empty_ax(ax, canvas: FigureCanvasTkAgg) -> None:
+        ax.clear()
+        ax.text(0.5, 0.5, "Sem dados — clique em \"Carregar da API\"",
+                ha="center", va="center", color="#aab7b8", fontsize=9)
+        ax.set_facecolor("#f8f9fa")
+        ax.axis("off")
+        canvas.draw()
+
+    def _build_categoria_tab(self, parent: ttk.Frame) -> None:
+        cols = [
+            ("categoria",   "Categoria",         180, "w"),
+            ("qtd",         "Qtd. Títulos",       90, "c"),
+            ("valor_total", "Valor Total (R$)",  140, "e"),
+            ("pct_total",   "% do Total",         90, "c"),
+            ("valor_medio", "Valor Médio (R$)",  140, "e"),
+        ]
+        self._tree_categoria = self._build_summary_table(parent, cols, height=10)
+        self._fig_categoria, self._ax_categoria, self._canvas_categoria = \
+            self._build_summary_chart(parent)
+        self._draw_empty_ax(self._ax_categoria, self._canvas_categoria)
+
+    def _build_filial_tab(self, parent: ttk.Frame) -> None:
+        cols = [
+            ("filial",      "Filial",            160, "w"),
+            ("qtd",         "Qtd. Títulos",        90, "c"),
+            ("valor_total", "Valor Total (R$)",   150, "e"),
+            ("pct_total",   "% do Total",          90, "c"),
+        ]
+        self._tree_filial = self._build_summary_table(parent, cols, height=8)
+        self._fig_filial, self._ax_filial, self._canvas_filial = \
+            self._build_summary_chart(parent)
+        self._draw_empty_ax(self._ax_filial, self._canvas_filial)
+
+    def _build_evolucao_tab(self, parent: ttk.Frame) -> None:
+        # a tabela tem colunas dinâmicas (um mês por coluna) — é reconstruída
+        # a cada atualização de dados, então aqui só reservamos o container.
+        self._evolucao_table_frame = ttk.Frame(parent)
+        self._evolucao_table_frame.pack(fill="x")
+        self._tree_evolucao: Optional[ttk.Treeview] = None
+
+        chart_frame = ttk.Frame(parent)
+        chart_frame.pack(fill="both", expand=True, padx=4, pady=(2, 4))
+        self._fig_evolucao = Figure(figsize=(13, 3.8), dpi=96, facecolor="#f0f2f5")
+        self._ax_evolucao = self._fig_evolucao.add_subplot(111)
+        self._fig_evolucao.subplots_adjust(left=0.07, right=0.98, top=0.88, bottom=0.2)
+        self._canvas_evolucao = FigureCanvasTkAgg(self._fig_evolucao, master=chart_frame)
+        self._canvas_evolucao.get_tk_widget().pack(fill="both", expand=True)
+        self._draw_empty_ax(self._ax_evolucao, self._canvas_evolucao)
 
     # ── barra de status ───────────────────────────────────────────────────────
 
@@ -417,6 +565,14 @@ class FinanceiroApp:
         if not df.empty:
             df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0.0)
             df["saldo"] = pd.to_numeric(df["saldo"], errors="coerce").fillna(0.0)
+            df["mes_ano"] = df["vencimento_real"].apply(_mes_ano)
+
+            regras = categorias.load_rules()
+            df["categoria"] = df.apply(
+                lambda r: categorias.classify(
+                    r.get("nome_fornecedor", ""), r.get("historico", ""), regras),
+                axis=1,
+            )
 
         self._df_raw = df
         self._apply_filters_and_refresh()
@@ -457,6 +613,9 @@ class FinanceiroApp:
         self._update_kpis()
         self._update_charts()
         self._update_table()
+        self._update_categoria_view()
+        self._update_evolucao_view()
+        self._update_filial_view()
 
     def _apply_filters(self, df: pd.DataFrame) -> pd.DataFrame:
         filial = self._f_filial.get().strip()
@@ -475,13 +634,19 @@ class FinanceiroApp:
         if tipo_op:
             df = df[df["descricao_operacao"].fillna("").str.lower().str.contains(tipo_op)]
 
-        vcto_de = _parse_date_input(self._f_vcto_de.get())
-        if vcto_de and len(vcto_de) == 8 and vcto_de.isdigit():
-            df = df[df["vencimento_real"] >= vcto_de]
+        categoria = self._f_categoria.get().strip()
+        if categoria:
+            df = df[df["categoria"] == categoria]
 
-        vcto_ate = _parse_date_input(self._f_vcto_ate.get())
-        if vcto_ate and len(vcto_ate) == 8 and vcto_ate.isdigit():
-            df = df[df["vencimento_real"] <= vcto_ate]
+        if self._f_vcto_de_on.get():
+            vcto_de = _parse_date_input(self._f_vcto_de.get())
+            if vcto_de and len(vcto_de) == 8 and vcto_de.isdigit():
+                df = df[df["vencimento_real"] >= vcto_de]
+
+        if self._f_vcto_ate_on.get():
+            vcto_ate = _parse_date_input(self._f_vcto_ate.get())
+            if vcto_ate and len(vcto_ate) == 8 and vcto_ate.isdigit():
+                df = df[df["vencimento_real"] <= vcto_ate]
 
         return df
 
@@ -639,6 +804,149 @@ class FinanceiroApp:
 
         self._canvas.draw()
 
+    # ── resumos (mesma visão de CONTAS_A_PAGAR_ANALISE.xlsx) ────────────────────
+
+    _brl_axis_fmt = mticker.FuncFormatter(
+        lambda x, _: f"R${x/1000:.0f}k" if abs(x) >= 1000 else f"R${x:.0f}")
+
+    def _update_categoria_view(self) -> None:
+        tree, ax, canvas = self._tree_categoria, self._ax_categoria, self._canvas_categoria
+        for row in tree.get_children():
+            tree.delete(row)
+
+        df = self._df
+        if df is None or df.empty:
+            self._draw_empty_ax(ax, canvas)
+            return
+
+        resumo = (
+            df.groupby("categoria", as_index=False)
+            .agg(qtd=("valor", "count"), valor_total=("valor", "sum"))
+            .sort_values("valor_total", ascending=False)
+        )
+        total_geral = resumo["valor_total"].sum()
+
+        for _, r in resumo.iterrows():
+            pct = (r["valor_total"] / total_geral) if total_geral else 0
+            valor_medio = (r["valor_total"] / r["qtd"]) if r["qtd"] else 0
+            tree.insert("", "end", values=(
+                r["categoria"], int(r["qtd"]), _brl(r["valor_total"]),
+                f"{pct * 100:.1f}%", _brl(valor_medio),
+            ))
+        tree.insert("", "end", tags=("total",), values=(
+            "TOTAL GERAL", int(resumo["qtd"].sum()), _brl(total_geral), "100,0%", "",
+        ))
+
+        ax.clear()
+        plot_data = resumo.sort_values("valor_total", ascending=True)
+        colors = [CATEGORIA_COLORS.get(c, "#7f8c8d") for c in plot_data["categoria"]]
+        bars = ax.barh(plot_data["categoria"], plot_data["valor_total"],
+                        color=colors, height=0.6, edgecolor="none")
+        ax.set_title("Valor Total por Categoria", fontsize=10, fontweight="bold", pad=10)
+        ax.set_xlabel("Valor (R$)", fontsize=8)
+        ax.tick_params(axis="both", labelsize=8)
+        ax.xaxis.set_major_formatter(self._brl_axis_fmt)
+        ax.set_facecolor("#fafafa")
+        for bar in bars:
+            w = bar.get_width()
+            ax.text(w * 1.01, bar.get_y() + bar.get_height() / 2,
+                    _brl(w), va="center", fontsize=7, color="#555")
+        canvas.draw()
+
+    def _update_filial_view(self) -> None:
+        tree, ax, canvas = self._tree_filial, self._ax_filial, self._canvas_filial
+        for row in tree.get_children():
+            tree.delete(row)
+
+        df = self._df
+        if df is None or df.empty:
+            self._draw_empty_ax(ax, canvas)
+            return
+
+        resumo = (
+            df.groupby("filial", as_index=False)
+            .agg(qtd=("valor", "count"), valor_total=("valor", "sum"))
+            .sort_values("valor_total", ascending=False)
+        )
+        total_geral = resumo["valor_total"].sum()
+
+        for _, r in resumo.iterrows():
+            pct = (r["valor_total"] / total_geral) if total_geral else 0
+            tree.insert("", "end", values=(
+                r["filial"], int(r["qtd"]), _brl(r["valor_total"]), f"{pct * 100:.1f}%",
+            ))
+        tree.insert("", "end", tags=("total",), values=(
+            "TOTAL GERAL", int(resumo["qtd"].sum()), _brl(total_geral), "100,0%",
+        ))
+
+        ax.clear()
+        pie_colors = CHART_COLORS[:len(resumo)]
+        wedges, texts, autotexts = ax.pie(
+            resumo["valor_total"], labels=resumo["filial"], autopct="%1.1f%%",
+            colors=pie_colors, startangle=90, textprops={"fontsize": 8},
+            wedgeprops={"edgecolor": "white", "linewidth": 1.5},
+        )
+        for at in autotexts:
+            at.set_fontsize(7.5)
+        ax.set_title("Valor Total por Filial", fontsize=10, fontweight="bold", pad=10)
+        canvas.draw()
+
+    def _update_evolucao_view(self) -> None:
+        for child in self._evolucao_table_frame.winfo_children():
+            child.destroy()
+        self._tree_evolucao = None
+
+        df = self._df
+        if df is None or df.empty:
+            self._draw_empty_ax(self._ax_evolucao, self._canvas_evolucao)
+            return
+
+        meses = sorted(m for m in df["mes_ano"].unique() if m)
+        pivot = (
+            df.groupby(["categoria", "mes_ano"])["valor"].sum()
+            .unstack(fill_value=0.0)
+            .reindex(columns=meses, fill_value=0.0)
+        )
+        pivot["Total"] = pivot.sum(axis=1)
+        pivot = pivot.sort_values("Total", ascending=False)
+
+        cols = [("categoria", "Categoria", 180, "w")]
+        cols += [(m, _fmt_mes(m), 95, "e") for m in meses]
+        cols.append(("total", "Total", 110, "e"))
+        tree = self._build_summary_table(
+            self._evolucao_table_frame, cols, height=min(11, len(pivot) + 2))
+        self._tree_evolucao = tree
+
+        for categoria, row in pivot.iterrows():
+            values = [categoria] + [_brl(row[m]) for m in meses] + [_brl(row["Total"])]
+            tree.insert("", "end", values=values)
+        total_row = (
+            ["TOTAL MENSAL"] + [_brl(pivot[m].sum()) for m in meses]
+            + [_brl(pivot["Total"].sum())]
+        )
+        tree.insert("", "end", tags=("total",), values=total_row)
+
+        ax = self._ax_evolucao
+        ax.clear()
+        x = range(len(meses))
+        bottom = [0.0] * len(meses)
+        for categoria in pivot.index:
+            vals = [pivot.loc[categoria, m] for m in meses]
+            ax.bar(x, vals, bottom=bottom, width=0.65, edgecolor="none",
+                   color=CATEGORIA_COLORS.get(categoria, "#7f8c8d"), label=categoria)
+            bottom = [b + v for b, v in zip(bottom, vals)]
+        ax.set_xticks(list(x))
+        ax.set_xticklabels([_fmt_mes(m) for m in meses], fontsize=7,
+                           rotation=45, ha="right")
+        ax.set_title("Evolução dos Custos por Categoria (mês de vencimento)",
+                     fontsize=10, fontweight="bold", pad=10)
+        ax.set_ylabel("Valor (R$)", fontsize=8)
+        ax.tick_params(axis="y", labelsize=7)
+        ax.yaxis.set_major_formatter(self._brl_axis_fmt)
+        ax.set_facecolor("#fafafa")
+        ax.legend(fontsize=6.5, loc="upper left", ncol=3, framealpha=0.7)
+        self._canvas_evolucao.draw()
+
     # ── tabela ────────────────────────────────────────────────────────────────
 
     def _update_table(self) -> None:
@@ -659,6 +967,7 @@ class FinanceiroApp:
                 row.get("codigo_operacao", ""),
                 row.get("descricao_operacao", ""),
                 row.get("nome_fornecedor", ""),
+                row.get("categoria", ""),
                 _fmt_date(row.get("emissao")),
                 _fmt_date(row.get("vencimento_real")),
                 _brl(row.get("valor", 0)),
@@ -716,9 +1025,12 @@ class FinanceiroApp:
     # ── utilitários ───────────────────────────────────────────────────────────
 
     def limpar(self) -> None:
-        for attr in ("_f_filial", "_f_forn", "_f_tipo", "_f_tipo_op",
-                     "_f_vcto_de", "_f_vcto_ate"):
+        for attr in ("_f_filial", "_f_forn", "_f_tipo", "_f_tipo_op", "_f_categoria"):
             getattr(self, attr).set("")
+        self._f_vcto_de_on.set(False)
+        self._f_vcto_ate_on.set(False)
+        self._toggle_date_filter(self._de_vcto_de, self._f_vcto_de_on)
+        self._toggle_date_filter(self._de_vcto_ate, self._f_vcto_ate_on)
         if self._df_raw is not None:
             self._apply_filters_and_refresh()
         self._set_status("Filtros limpos.")
@@ -731,6 +1043,9 @@ class FinanceiroApp:
         for row in self._tree.get_children():
             self._tree.delete(row)
         self._draw_empty_charts()
+        self._update_categoria_view()
+        self._update_evolucao_view()
+        self._update_filial_view()
         self._progress["value"] = 0
         self._pct_var.set("")
 
@@ -767,6 +1082,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     RIGHT     = Alignment(horizontal="right",  vertical="center")
     LEFT      = Alignment(horizontal="left",   vertical="center")
     BRL       = '#,##0.00'
+    PCT       = '0.0%'
     DATE_COLS = {"emissao", "vencimento_real"}
     CURR_COLS = {"valor", "saldo"}
 
@@ -791,8 +1107,10 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Cód. Operação",  "codigo_operacao",    12),
         ("Tipo Operação",  "descricao_operacao", 26),
         ("Fornecedor",     "nome_fornecedor",    30),
+        ("Categoria",      "categoria",          22),
         ("Emissão",        "emissao",            13),
         ("Vencimento",     "vencimento_real",    13),
+        ("Mês/Ano",        "mes_ano",            10),
         ("Valor (R$)",     "valor",              16),
         ("Saldo (R$)",     "saldo",              16),
         ("Histórico",      "historico",          42),
@@ -816,6 +1134,8 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
             val = row.get(field)
             if field in DATE_COLS:
                 val = _fmt_date(val)
+            elif field == "mes_ano":
+                val = _fmt_mes(val)
             cell = ws1.cell(row=ri, column=ci, value=val)
             cell.border = BORDER
             if field in CURR_COLS:
@@ -913,6 +1233,129 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         if ri % 2 == 0:
             for ci in range(1, 5):
                 ws4.cell(ri, ci).fill = ALT_FILL
+
+    # ── aba 5: Resumo por Categoria ─────────────────────────────────────────
+    ws5 = wb.create_sheet("Resumo por Categoria")
+    ws5.cell(1, 1, "Análise de Contas a Pagar por Categoria").font = Font(
+        bold=True, color="1A5276", size=13, name="Calibri")
+    ws5.cell(2, 1, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}").font = Font(
+        italic=True, size=9, color="7F8C8D", name="Calibri")
+
+    by_cat = (
+        df.groupby("categoria", as_index=False)
+        .agg(qtd=("valor", "count"), valor_total=("valor", "sum"))
+        .sort_values("valor_total", ascending=False)
+    )
+    total_cat = float(by_cat["valor_total"].sum())
+
+    hdr_row5 = 4
+    hdrs5 = ["Categoria", "Qtd. Títulos", "Valor Total (R$)", "% do Total", "Valor Médio (R$)"]
+    widths5 = [26, 14, 20, 12, 20]
+    for ci, (h, w) in enumerate(zip(hdrs5, widths5), 1):
+        _hdr(ws5, hdr_row5, ci, h)
+        ws5.column_dimensions[get_column_letter(ci)].width = w
+    ws5.freeze_panes = f"A{hdr_row5 + 1}"
+
+    ri = hdr_row5 + 1
+    for _, r in by_cat.iterrows():
+        pct = (r["valor_total"] / total_cat) if total_cat else 0.0
+        valor_medio = (r["valor_total"] / r["qtd"]) if r["qtd"] else 0.0
+        ws5.cell(ri, 1, r["categoria"])
+        ws5.cell(ri, 2, int(r["qtd"]))
+        c3 = ws5.cell(ri, 3, float(r["valor_total"])); c3.number_format = BRL
+        c4 = ws5.cell(ri, 4, pct); c4.number_format = PCT
+        c5 = ws5.cell(ri, 5, float(valor_medio)); c5.number_format = BRL
+        if (ri - hdr_row5) % 2 == 0:
+            for ci in range(1, 6):
+                ws5.cell(ri, ci).fill = ALT_FILL
+        ri += 1
+
+    BOLD10 = Font(bold=True, name="Calibri", size=10)
+    ws5.cell(ri, 1, "TOTAL GERAL").font = BOLD10
+    ws5.cell(ri, 2, int(by_cat["qtd"].sum())).font = BOLD10
+    c3 = ws5.cell(ri, 3, total_cat); c3.number_format = BRL; c3.font = BOLD10
+    c4 = ws5.cell(ri, 4, 1.0); c4.number_format = PCT; c4.font = BOLD10
+
+    # ── aba 6: Evolução Mensal ──────────────────────────────────────────────
+    ws6 = wb.create_sheet("Evolução Mensal")
+    ws6.cell(1, 1, "Evolução dos Custos ao Longo do Tempo").font = Font(
+        bold=True, color="1A5276", size=13, name="Calibri")
+    ws6.cell(2, 1, "Valores por vencimento, agrupados por mês e categoria").font = Font(
+        italic=True, size=9, color="7F8C8D", name="Calibri")
+
+    meses = sorted(m for m in df["mes_ano"].unique() if m)
+    pivot = (
+        df.groupby(["categoria", "mes_ano"])["valor"].sum()
+        .unstack(fill_value=0.0)
+        .reindex(columns=meses, fill_value=0.0)
+    )
+    pivot["Total"] = pivot.sum(axis=1)
+    pivot = pivot.sort_values("Total", ascending=False)
+
+    hdr_row6 = 4
+    headers6 = ["Categoria"] + [_fmt_mes(m) for m in meses] + ["Total"]
+    for ci, h in enumerate(headers6, 1):
+        _hdr(ws6, hdr_row6, ci, h)
+    ws6.column_dimensions["A"].width = 26
+    for ci in range(2, len(headers6) + 1):
+        ws6.column_dimensions[get_column_letter(ci)].width = 14
+    ws6.freeze_panes = f"B{hdr_row6 + 1}"
+
+    ri = hdr_row6 + 1
+    for categoria, row in pivot.iterrows():
+        ws6.cell(ri, 1, categoria)
+        for ci, m in enumerate(meses, 2):
+            c = ws6.cell(ri, ci, float(row[m]))
+            c.number_format = BRL
+        ctotal = ws6.cell(ri, len(meses) + 2, float(row["Total"]))
+        ctotal.number_format = BRL
+        ctotal.font = BOLD10
+        ri += 1
+
+    ws6.cell(ri, 1, "TOTAL MENSAL").font = BOLD10
+    for ci, m in enumerate(meses, 2):
+        c = ws6.cell(ri, ci, float(pivot[m].sum()))
+        c.number_format = BRL
+        c.font = BOLD10
+    ctotal_geral = ws6.cell(ri, len(meses) + 2, float(pivot["Total"].sum()))
+    ctotal_geral.number_format = BRL
+    ctotal_geral.font = BOLD10
+
+    # ── aba 7: Resumo por Filial ────────────────────────────────────────────
+    ws7 = wb.create_sheet("Resumo por Filial")
+    ws7.cell(1, 1, "Contas a Pagar por Filial").font = Font(
+        bold=True, color="1A5276", size=13, name="Calibri")
+
+    by_filial = (
+        df.groupby("filial", as_index=False)
+        .agg(qtd=("valor", "count"), valor_total=("valor", "sum"))
+        .sort_values("valor_total", ascending=False)
+    )
+    total_filial = float(by_filial["valor_total"].sum())
+
+    hdr_row7 = 3
+    hdrs7 = ["Filial", "Qtd. Títulos", "Valor Total (R$)", "% do Total"]
+    widths7 = [18, 14, 20, 12]
+    for ci, (h, w) in enumerate(zip(hdrs7, widths7), 1):
+        _hdr(ws7, hdr_row7, ci, h)
+        ws7.column_dimensions[get_column_letter(ci)].width = w
+
+    ri = hdr_row7 + 1
+    for _, r in by_filial.iterrows():
+        pct = (r["valor_total"] / total_filial) if total_filial else 0.0
+        ws7.cell(ri, 1, r["filial"])
+        ws7.cell(ri, 2, int(r["qtd"]))
+        c3 = ws7.cell(ri, 3, float(r["valor_total"])); c3.number_format = BRL
+        c4 = ws7.cell(ri, 4, pct); c4.number_format = PCT
+        if (ri - hdr_row7) % 2 == 0:
+            for ci in range(1, 5):
+                ws7.cell(ri, ci).fill = ALT_FILL
+        ri += 1
+
+    ws7.cell(ri, 1, "TOTAL GERAL").font = BOLD10
+    ws7.cell(ri, 2, int(by_filial["qtd"].sum())).font = BOLD10
+    c3 = ws7.cell(ri, 3, total_filial); c3.number_format = BRL; c3.font = BOLD10
+    c4 = ws7.cell(ri, 4, 1.0); c4.number_format = PCT; c4.font = BOLD10
 
     wb.save(path)
 

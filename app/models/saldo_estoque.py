@@ -24,3 +24,4 @@ class SaldoEstoque(Base):
     quantidade_pedido_venda = Column("B2_QPEDVEN", Numeric(18, 4))
     quantidade_pedido_compra = Column("B2_QPEDCOM", Numeric(18, 4))
     custo_medio = Column("B2_CM1", Numeric(18, 4))
+    valor_atual = Column("B2_VATU1", Numeric(18, 2))

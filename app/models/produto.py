@@ -22,6 +22,7 @@ class Produto(Base):
     unidade_medida = Column("B1_UM", String(2))
     grupo = Column("B1_GRUPO", String(4))
     local_padrao = Column("B1_LOCPAD", String(2))
+    conversao = Column("B1_CONV", Numeric(18, 4))
     ncm = Column("B1_POSIPI", String(10))
     peso_liquido = Column("B1_PESO", Numeric(18, 4))
     peso_bruto = Column("B1_PESBRUTO", Numeric(18, 4))

@@ -1,11 +1,12 @@
 from typing import Optional
 
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
-from app.crud.base import CRUDBase
 from app.database import get_db
+from app.models.produto import Produto
 from app.models.saldo_estoque import SaldoEstoque
 from app.schemas.common import PaginatedResponse
 from app.schemas.saldo_estoque import SaldoEstoqueRead
@@ -18,39 +19,60 @@ router = APIRouter(
 )
 
 
-class CRUDSaldoEstoque(CRUDBase):
-    def _base_query(self, db: Session):
-        # Convenção Protheus: registros com D_E_L_E_T_ = '*' estão logicamente excluídos.
-        return db.query(self.model).filter(self.model.deletado != "*")
-
-
-crud_saldo_estoque = CRUDSaldoEstoque(SaldoEstoque, pk_field="rec_no")
+def _query_saldos_estoque(db: Session, tipo_produto: Optional[str], local: Optional[str]):
+    query = (
+        db.query(SaldoEstoque, Produto.descricao, Produto.conversao)
+        .join(
+            Produto,
+            and_(
+                Produto.deletado != "*",
+                Produto.filial == "  ",
+                Produto.codigo == SaldoEstoque.codigo_produto,
+            ),
+        )
+        .filter(SaldoEstoque.deletado != "*", SaldoEstoque.saldo_atual > 0)
+    )
+    # Réplica de select_estoque_produtos.sql, mas com o tipo de produto (B1_TIPO)
+    # e o armazém (B2_LOCAL) parametrizáveis via query string em vez de fixos —
+    # o cliente decide qual recorte de estoque analisar (ex.: produtos acabados
+    # "PA"/armazém "01" ou vasilhames "AM"/armazém "20").
+    if tipo_produto:
+        query = query.filter(Produto.tipo == tipo_produto)
+    if local:
+        query = query.filter(SaldoEstoque.local == local)
+    return query
 
 
 @router.get("/", response_model=PaginatedResponse[SaldoEstoqueRead])
 def listar_saldos_estoque(
     skip: int = 0,
     limit: int = Query(50, le=200),
-    order_by: Optional[str] = None,
-    filial: Optional[str] = None,
-    codigo_produto: Optional[str] = None,
+    tipo_produto: Optional[str] = None,
     local: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    filters = {}
-    if filial:
-        filters["filial"] = filial
-    if codigo_produto:
-        filters["codigo_produto"] = codigo_produto
-    if local:
-        filters["local"] = local
-    items, total = crud_saldo_estoque.list(db, skip, limit, order_by, filters)
+    query = _query_saldos_estoque(db, tipo_produto, local)
+    total = query.count()
+    # order_by aplicado apenas aqui (após o count()): o MSSQL exige ORDER BY
+    # junto de OFFSET/LIMIT, mas não aceita ORDER BY dentro da subquery que o
+    # SQLAlchemy gera para count() quando não há TOP/OFFSET nela.
+    linhas = (
+        query.order_by(SaldoEstoque.filial, SaldoEstoque.codigo_produto)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    items = []
+    for saldo, descricao_produto, conversao in linhas:
+        quantidade = (saldo.saldo_atual / conversao) if conversao else saldo.saldo_atual
+        items.append(SaldoEstoqueRead(
+            filial=saldo.filial,
+            local=saldo.local,
+            codigo_produto=saldo.codigo_produto,
+            descricao_produto=descricao_produto,
+            quantidade=quantidade,
+            valor_atual=saldo.valor_atual,
+        ))
+
     return {"total": total, "skip": skip, "limit": limit, "items": items}
-
-
-@router.get("/{rec_no}", response_model=SaldoEstoqueRead)
-def obter_saldo_estoque(rec_no: int, db: Session = Depends(get_db)):
-    saldo = crud_saldo_estoque.get(db, rec_no)
-    if not saldo:
-        raise HTTPException(404, "Saldo de estoque não encontrado")
-    return saldo

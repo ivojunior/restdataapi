@@ -35,8 +35,8 @@ Atualmente a API só lê tabelas que já existem em outro sistema (o Protheus). 
 - **TituloPagar** (tabela `SE2070` — Contas a Pagar): `rec_no (R_E_C_N_O_), filial, prefixo, numero, parcela, tipo, fornecedor, loja, emissao, vencimento_original, vencimento, valor, saldo, moeda, historico, data_baixa`.
   - Datas (`emissao`, `vencimento`, `vencimento_original`, `data_baixa`) são strings `AAAAMMDD`, o formato usado pelo dicionário de dados do Protheus — não são colunas `DATE`.
 - **Fornecedor** (tabela `SA2070` — Fornecedores): `rec_no (R_E_C_N_O_), filial, codigo, loja, nome, nome_reduzido, cnpj_cpf, inscricao_estadual, endereco, bairro, municipio, estado, cep, ddd, telefone, contato, tipo, bloqueado`.
-- **SaldoEstoque** (tabela `SB2070` — Saldo Atual de Estoque): `rec_no (R_E_C_N_O_), filial, codigo_produto, local, saldo_atual, quantidade_empenhada, quantidade_reservada, quantidade_pedido_venda, quantidade_pedido_compra, custo_medio`.
-- **Produto** (tabela `SB1000` — Cadastro de Produtos): `rec_no (R_E_C_N_O_), filial, codigo, descricao, tipo, unidade_medida, grupo, local_padrao, ncm, peso_liquido, peso_bruto, codigo_barras, preco_venda, bloqueado`.
+- **SaldoEstoque** (tabela `SB2070` — Saldo Atual de Estoque): `rec_no (R_E_C_N_O_), filial, codigo_produto, local, saldo_atual, quantidade_empenhada, quantidade_reservada, quantidade_pedido_venda, quantidade_pedido_compra, custo_medio, valor_atual`.
+- **Produto** (tabela `SB1000` — Cadastro de Produtos): `rec_no (R_E_C_N_O_), filial, codigo, descricao, tipo, unidade_medida, grupo, local_padrao, conversao, ncm, peso_liquido, peso_bruto, codigo_barras, preco_venda, bloqueado`. Usada também como apoio (join) no relatório `/saldos-estoque/`.
 - **TipoOperacao** (tabela `PA6000` — Tipos de Operação Financeira): `rec_no (R_E_C_N_O_), filial, codigo, descricao`. Usada apenas como apoio (join) no relatório `/financeiro/`, sem rota própria.
 
 Para todas:
@@ -108,11 +108,10 @@ Todos os endpoints são `GET` — não existem rotas `POST`, `PUT` ou `DELETE`.
 | GET    | `/titulos-pagar/{rec_no}`          | Obtém um título a pagar pelo `R_E_C_N_O_` |
 | GET    | `/fornecedores/`                   | Lista fornecedores (SA2070, filtra por filial/codigo/cnpj_cpf/nome) |
 | GET    | `/fornecedores/{rec_no}`           | Obtém um fornecedor pelo `R_E_C_N_O_` |
-| GET    | `/saldos-estoque/`                 | Lista saldos de estoque (SB2070, filtra por filial/codigo_produto/local) |
-| GET    | `/saldos-estoque/{rec_no}`         | Obtém um saldo de estoque pelo `R_E_C_N_O_` |
 | GET    | `/produtos/`                       | Lista produtos (SB1000, filtra por filial/codigo/grupo) |
 | GET    | `/produtos/{rec_no}`               | Obtém um produto pelo `R_E_C_N_O_` |
 | GET    | `/financeiro/`                     | Relatório financeiro (réplica de `select_financeiro.sql`): títulos a pagar (SE2070) com fornecedor (SA2070) e descrição do tipo de operação (PA6000) |
+| GET    | `/saldos-estoque/`                 | Relatório de saldo de estoque (baseado em `select_estoque_produtos.sql`): saldos (SB2070) com descrição e fator de conversão do produto (SB1000); filtra por `tipo_produto`/`local` |
 
 Parâmetros comuns de listagem: `skip`, `limit` (paginação), `order_by` (ex.: `nome` ou `-criado_em` para ordem decrescente) e filtros por campo (ex.: `?filial=01`).
 
@@ -125,6 +124,20 @@ Réplica, via SQLAlchemy, exatamente o `SELECT` de `select_financeiro.sql`: junt
 - `tipo` fora de `PA`, `PR`, `NDF`.
 
 Suporta apenas paginação (`skip`, `limit`) — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
+
+### `/saldos-estoque/`
+
+Baseado no `SELECT` de `select_estoque_produtos.sql`: junta `SB2070` (saldo de estoque) com `SB1000` (produto, join obrigatório na filial `"  "` — saldos de produtos sem cadastro correspondente não aparecem). Aplica como regra de negócio fixa (sempre ativa):
+
+- Apenas saldos não excluídos (`D_E_L_E_T_ != '*'`);
+- `saldo_atual > 0`.
+
+Diferente de `/financeiro/`, o tipo de produto e o armazém **não são fixos** — são parametrizáveis via query string, para que cada cliente escolha o recorte de estoque que quer analisar:
+
+- `tipo_produto` (opcional): filtra pelo tipo do produto (`B1_TIPO`), ex. `PA` (produto acabado) ou `AM` (vasilhame). Sem o parâmetro, traz qualquer tipo.
+- `local` (opcional): filtra pelo armazém (`B2_LOCAL`), ex. `01` ou `20`. Sem o parâmetro, traz qualquer armazém.
+
+O campo `quantidade` replica `B2_QATU / B1_CONV` da consulta original (quantidade convertida pela unidade de medida do produto). Suporta apenas paginação (`skip`, `limit`) e os dois filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
 
 ## Testes
 

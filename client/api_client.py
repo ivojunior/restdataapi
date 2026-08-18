@@ -58,3 +58,52 @@ class APIClient:
                 break
 
         return all_items, total
+
+    def get_saldos_estoque_page(
+        self,
+        skip: int = 0,
+        limit: int = 200,
+        tipo_produto: Optional[str] = None,
+        local: Optional[str] = None,
+    ) -> Dict:
+        params: Dict[str, Any] = {"skip": skip, "limit": limit}
+        if tipo_produto:
+            params["tipo_produto"] = tipo_produto
+        if local:
+            params["local"] = local
+        return self._get("/saldos-estoque/", params)
+
+    def get_all_saldos_estoque(
+        self,
+        tipo_produto: Optional[str] = None,
+        local: Optional[str] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> Tuple[List[Dict], int]:
+        """Busca todas as páginas do relatório de saldo de estoque.
+
+        O endpoint /saldos-estoque aplica sempre como regra fixa apenas saldo
+        positivo e registros não excluídos; tipo de produto e armazém são
+        parametrizáveis (tipo_produto/local) — é o cliente quem decide qual
+        recorte de estoque consultar. Qualquer outro filtro (filial, código,
+        descrição etc.) é aplicado no cliente, após o carregamento completo
+        dos dados.
+        """
+        all_items: List[Dict] = []
+        skip = 0
+        limit = 200
+
+        while True:
+            result = self.get_saldos_estoque_page(
+                skip=skip, limit=limit, tipo_produto=tipo_produto, local=local)
+            items = result["items"]
+            total = result["total"]
+            all_items.extend(items)
+            skip += len(items)
+
+            if progress_callback:
+                progress_callback(len(all_items), total)
+
+            if skip >= total or not items:
+                break
+
+        return all_items, total
