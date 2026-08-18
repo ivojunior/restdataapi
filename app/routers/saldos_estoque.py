@@ -20,8 +20,20 @@ router = APIRouter(
 
 
 def _query_saldos_estoque(db: Session, tipo_produto: Optional[str], local: Optional[str]):
+    # Seleciona apenas as colunas usadas pelo relatório (em vez da entidade
+    # SaldoEstoque inteira): o model mapeia campos de SB2070 (ex.: B2_QPEDCOM)
+    # que não existem em todas as instalações do Protheus, e não são usados
+    # aqui — selecioná-los à toa quebra a query com "Invalid column name".
     query = (
-        db.query(SaldoEstoque, Produto.descricao, Produto.conversao)
+        db.query(
+            SaldoEstoque.filial,
+            SaldoEstoque.local,
+            SaldoEstoque.codigo_produto,
+            SaldoEstoque.saldo_atual,
+            SaldoEstoque.valor_atual,
+            Produto.descricao,
+            Produto.conversao,
+        )
         .join(
             Produto,
             and_(
@@ -64,15 +76,15 @@ def listar_saldos_estoque(
     )
 
     items = []
-    for saldo, descricao_produto, conversao in linhas:
-        quantidade = (saldo.saldo_atual / conversao) if conversao else saldo.saldo_atual
+    for filial, local_armazem, codigo_produto, saldo_atual, valor_atual, descricao_produto, conversao in linhas:
+        quantidade = (saldo_atual / conversao) if conversao else saldo_atual
         items.append(SaldoEstoqueRead(
-            filial=saldo.filial,
-            local=saldo.local,
-            codigo_produto=saldo.codigo_produto,
+            filial=filial,
+            local=local_armazem,
+            codigo_produto=codigo_produto,
             descricao_produto=descricao_produto,
             quantidade=quantidade,
-            valor_atual=saldo.valor_atual,
+            valor_atual=valor_atual,
         ))
 
     return {"total": total, "skip": skip, "limit": limit, "items": items}
