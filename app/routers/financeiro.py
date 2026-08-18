@@ -60,7 +60,10 @@ def listar_financeiro(
 ):
     query = _query_financeiro(db)
     total = query.count()
-    linhas = query.offset(skip).limit(limit).all()
+    # order_by aplicado apenas aqui (após o count()): o MSSQL exige ORDER BY
+    # junto de OFFSET/LIMIT, mas não aceita ORDER BY dentro da subquery que o
+    # SQLAlchemy gera para count() quando não há TOP/OFFSET nela.
+    linhas = query.order_by(TituloPagar.rec_no).offset(skip).limit(limit).all()
 
     items = []
     for titulo, descricao_operacao in linhas:

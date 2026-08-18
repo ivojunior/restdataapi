@@ -36,12 +36,20 @@ class CRUDBase(Generic[ModelType]):
         for field, value in (filters or {}).items():
             query = query.filter(getattr(self.model, field) == value)
 
-        if order_by:
-            column_name = order_by.lstrip("-")
-            column = getattr(self.model, column_name, None)
-            if column is not None:
-                query = query.order_by(desc(column) if order_by.startswith("-") else asc(column))
-
+        # total é contado antes do order_by: o SQLAlchemy envolve a query em uma
+        # subquery para o count(), e o MSSQL não aceita ORDER BY em uma subquery
+        # sem TOP/OFFSET.
         total = query.count()
+
+        column = None
+        if order_by:
+            column = getattr(self.model, order_by.lstrip("-"), None)
+        descending = bool(order_by) and order_by.startswith("-")
+        if column is None:
+            # MSSQL exige ORDER BY sempre que a query usa OFFSET/LIMIT.
+            column = getattr(self.model, self.pk_field)
+            descending = False
+        query = query.order_by(desc(column) if descending else asc(column))
+
         items = query.offset(skip).limit(limit).all()
         return items, total
