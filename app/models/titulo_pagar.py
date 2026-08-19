@@ -35,3 +35,5 @@ class TituloPagar(Base):
     data_baixa = Column("E2_BAIXA", String(8))
     codigo_operacao = Column("E2_YOPER", String(6))
     nome_fornecedor = Column("E2_NOMFOR", String(40))
+    # "1" = título de recuperação judicial; "2" ou vazio = não é.
+    recuperacao_judicial = Column("E2_YRJ", String(1))

@@ -84,6 +84,7 @@ TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
     ("valor",              "Valor (R$)",    115,  "e"),
     ("saldo",              "Saldo (R$)",    115,  "e"),
     ("historico",          "Histórico",     200,  "w"),
+    ("recuperacao_judicial", "Rec. Judicial", 100, "c"),
     ("status",             "Status",         85,  "c"),
 ]
 
@@ -102,6 +103,11 @@ def _fmt_date(s) -> str:
     if len(s) == 8 and s.isdigit():
         return f"{s[6:8]}/{s[4:6]}/{s[:4]}"
     return s or "—"
+
+
+def _fmt_rec_judicial(v) -> str:
+    """E2_YRJ: "1" = título de recuperação judicial; "2" ou vazio = não é."""
+    return "Sim" if str(v or "").strip() == "1" else "Não"
 
 
 def _status_from_row(row: Dict) -> str:
@@ -1014,6 +1020,7 @@ class FinanceiroApp:
                 _brl(row.get("valor", 0)),
                 _brl(row.get("saldo", 0)),
                 row.get("historico", ""),
+                _fmt_rec_judicial(row.get("recuperacao_judicial")),
                 status,
             ))
 
@@ -1154,6 +1161,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Valor (R$)",     "valor",              16),
         ("Saldo (R$)",     "saldo",              16),
         ("Histórico",      "historico",          42),
+        ("Rec. Judicial",  "recuperacao_judicial", 14),
         ("Status",         "status",             12),
     ]
 
@@ -1176,6 +1184,8 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
                 val = _fmt_date(val)
             elif field == "mes_ano":
                 val = _fmt_mes(val)
+            elif field == "recuperacao_judicial":
+                val = _fmt_rec_judicial(val)
             cell = ws1.cell(row=ri, column=ci, value=val)
             cell.border = BORDER
             if field in CURR_COLS:

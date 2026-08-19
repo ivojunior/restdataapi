@@ -70,6 +70,24 @@ def test_lista_com_join_de_fornecedor_e_tipo_operacao(client, auth_headers, db_s
     assert item["descricao_operacao"] == "Compra de Mercadoria"
 
 
+def test_expoe_recuperacao_judicial(client, auth_headers, db_session):
+    db_session.add_all(
+        [
+            _fornecedor(),
+            _titulo(numero="000001", recuperacao_judicial="1"),
+            _titulo(numero="000002", recuperacao_judicial="2"),
+            _titulo(numero="000003"),
+        ]
+    )
+    db_session.commit()
+
+    resposta = client.get("/financeiro/", headers=auth_headers)
+    valores = {item["numero"]: item["recuperacao_judicial"] for item in resposta.json()["items"]}
+    assert valores["000001"] == "1"
+    assert valores["000002"] == "2"
+    assert valores["000003"] is None
+
+
 def test_titulo_sem_tipo_operacao_correspondente_ainda_aparece(client, auth_headers, db_session):
     db_session.add_all([_fornecedor(), _titulo(codigo_operacao="999")])
     db_session.commit()

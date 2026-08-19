@@ -20,3 +20,4 @@ class FinanceiroRead(BaseModel):
     nome_fornecedor: Optional[str] = None
     data_baixa: Optional[str] = None
     historico: str
+    recuperacao_judicial: Optional[str] = None
