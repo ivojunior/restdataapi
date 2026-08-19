@@ -216,7 +216,7 @@ class EstoqueApp:
         # botões
         btn = ttk.Frame(f)
         btn.grid(row=0, column=col, sticky="e", padx=(20, 0))
-        ttk.Button(btn, text=" Carregar da API ", style="Primary.TButton",
+        ttk.Button(btn, text=" Carregar do Protheus ", style="Primary.TButton",
                    command=self.consultar).pack(side="left", padx=(0, 6))
         ttk.Button(btn, text="Aplicar filtros", style="Secondary.TButton",
                    command=self._on_filtros_alterados).pack(side="left", padx=(0, 6))
@@ -465,7 +465,7 @@ class EstoqueApp:
     def _draw_empty_charts(self) -> None:
         for ax in self._axes.flat:
             ax.clear()
-            ax.text(0.5, 0.5, "Sem dados — clique em \"Carregar da API\"",
+            ax.text(0.5, 0.5, "Sem dados — clique em \"Carregar do Protheus\"",
                     ha="center", va="center", color="#aab7b8", fontsize=10.5)
             ax.set_facecolor("#f8f9fa")
             ax.axis("off")

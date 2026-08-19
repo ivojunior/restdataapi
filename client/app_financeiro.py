@@ -314,7 +314,7 @@ class FinanceiroApp:
         # botões
         btn = ttk.Frame(f)
         btn.grid(row=0, column=col, sticky="e", padx=(20, 0))
-        ttk.Button(btn, text=" Carregar da API ", style="Primary.TButton",
+        ttk.Button(btn, text=" Carregar do Protheus ", style="Primary.TButton",
                    command=self.consultar).pack(side="left", padx=(0, 6))
         ttk.Button(btn, text="Aplicar filtros", style="Secondary.TButton",
                    command=self._on_filtros_alterados).pack(side="left", padx=(0, 6))
@@ -335,12 +335,13 @@ class FinanceiroApp:
 
         self._kpi_vars: Dict[str, tk.StringVar] = {}
         cards_cfg = [
-            ("total_titulos", "Total de Títulos",  "#2c3e50"),
-            ("valor_total",   "Valor Total",        "#1a5276"),
-            ("saldo_total",   "Saldo a Pagar",      "#154360"),
-            ("em_aberto",     "Em Aberto",          "#1e8449"),
-            ("vencidos",      "Vencidos",           "#922b21"),
-            ("baixados",      "Baixados",           "#626567"),
+            ("total_titulos",        "Total de Títulos",      "#2c3e50"),
+            ("valor_total",          "Valor Total",           "#1a5276"),
+            ("recuperacao_judicial", "Recuperação Judicial",  "#6c3483"),
+            ("saldo_total",          "Saldo a Pagar",         "#154360"),
+            ("em_aberto",            "Em Aberto",             "#1e8449"),
+            ("vencidos",             "Vencidos",              "#922b21"),
+            ("baixados",             "Baixados",              "#626567"),
         ]
 
         for i, (key, label, fg) in enumerate(cards_cfg):
@@ -468,7 +469,7 @@ class FinanceiroApp:
     @staticmethod
     def _draw_empty_ax(ax, canvas: FigureCanvasTkAgg) -> None:
         ax.clear()
-        ax.text(0.5, 0.5, "Sem dados — clique em \"Carregar da API\"",
+        ax.text(0.5, 0.5, "Sem dados — clique em \"Carregar do Protheus\"",
                 ha="center", va="center", color="#aab7b8", fontsize=10.5)
         ax.set_facecolor("#f8f9fa")
         ax.axis("off")
@@ -703,13 +704,23 @@ class FinanceiroApp:
                 v.set("—")
             return
 
-        ab = df[df["status"] == "Em aberto"]
-        ve = df[df["status"] == "Vencido"]
+        # Recuperação judicial (E2_YRJ == "1"): some do valor total à parte;
+        # Saldo a Pagar/Em Aberto/Vencidos passam a ignorar esses títulos.
+        if "recuperacao_judicial" in df.columns:
+            rj_mask = df["recuperacao_judicial"].fillna("").astype(str).str.strip() == "1"
+        else:
+            rj_mask = pd.Series(False, index=df.index)
+        rj = df[rj_mask]
+        nao_rj = df[~rj_mask]
+
+        ab = nao_rj[nao_rj["status"] == "Em aberto"]
+        ve = nao_rj[nao_rj["status"] == "Vencido"]
         bx = df[df["status"] == "Baixado"]
 
         self._kpi_vars["total_titulos"].set(f'{len(df):,}'.replace(",", "."))
         self._kpi_vars["valor_total"].set(_brl(df["valor"].sum()))
-        self._kpi_vars["saldo_total"].set(_brl(df["saldo"].sum()))
+        self._kpi_vars["recuperacao_judicial"].set(_brl(rj["valor"].sum()))
+        self._kpi_vars["saldo_total"].set(_brl(nao_rj["saldo"].sum()))
         self._kpi_vars["em_aberto"].set(
             f'{len(ab):,}'.replace(",", ".") + "\n" + _brl(ab["saldo"].sum()))
         self._kpi_vars["vencidos"].set(
@@ -722,7 +733,7 @@ class FinanceiroApp:
     def _draw_empty_charts(self) -> None:
         for ax in self._axes.flat:
             ax.clear()
-            ax.text(0.5, 0.5, "Sem dados — clique em \"Carregar da API\"",
+            ax.text(0.5, 0.5, "Sem dados — clique em \"Carregar do Protheus\"",
                     ha="center", va="center", color="#aab7b8", fontsize=10.5)
             ax.set_facecolor("#f8f9fa")
             ax.axis("off")
@@ -1075,7 +1086,7 @@ class FinanceiroApp:
     def limpar(self) -> None:
         # O período e o status (Vencimento De/Até/Status) ficam fora deste
         # botão: são enviados à API e só são reaplicados ao clicar em
-        # "Carregar da API" novamente.
+        # "Carregar do Protheus" novamente.
         for attr in ("_f_filial", "_f_forn", "_f_tipo", "_f_tipo_op", "_f_categoria"):
             getattr(self, attr).set("")
         if self._df_raw is not None:
