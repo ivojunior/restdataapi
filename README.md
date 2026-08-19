@@ -138,8 +138,9 @@ Diferente da consulta original — que fixa o vencimento mínimo em `'20260301'`
 
 - `vencimento_de` (opcional): filtra pelo vencimento real (`E2_VENCREA`, formato `AAAAMMDD`), trazendo apenas títulos com `vencimento_real >= vencimento_de`. Sem o parâmetro, assume a data atual do sistema (equivalente a `vencimento_de=<hoje>`).
 - `vencimento_ate` (opcional): filtra por `vencimento_real <= vencimento_ate`. Sem o parâmetro, não limita o vencimento máximo.
+- `status` (opcional): filtra pelo mesmo status já calculado nos clients desktop, com base em `E2_BAIXA`/`E2_VENCREA` — `em_aberto` (sem data de baixa e `vencimento_real >= hoje`), `vencido` (sem data de baixa e `vencimento_real < hoje`) ou `baixado` (com data de baixa preenchida). Sem o parâmetro, não filtra por status. Como `vencimento_de` já começa em hoje por padrão, para ver títulos `vencido` é preciso recuar `vencimento_de`.
 
-Suporta apenas paginação (`skip`, `limit`) e os dois filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
+Suporta apenas paginação (`skip`, `limit`) e os filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
 
 ### `/saldos-estoque/`
 
@@ -176,7 +177,7 @@ Além da API, o diretório `client/` traz aplicações desktop (Tkinter) que con
 
 | Script                     | Endpoint            | Observação |
 |-----------------------------|---------------------|------------|
-| `client/app_financeiro.py`  | `/financeiro/`      | `vencimento_de`/`vencimento_ate` já iniciam marcados com a data atual (mesmo padrão da API); demais filtros são aplicados no cliente. |
+| `client/app_financeiro.py`  | `/financeiro/`      | `vencimento_de`/`vencimento_ate`/`status` já vão para a API (período inicia na data atual, mesmo padrão da API); demais filtros são aplicados no cliente. |
 | `client/app_estoque.py`     | `/saldos-estoque/`  | `tipo_produto`/`local` resolvidos por um seletor de "Tipo de Estoque". |
 | `client/app_cargas.py`      | `/cargas/`          | `data_inicial` é opcional (a API assume a data atual quando ausente); o seletor de data desta tela já inicia na data de hoje, e o usuário pode trocá-la antes de consultar. |
 

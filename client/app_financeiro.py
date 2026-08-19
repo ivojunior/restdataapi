@@ -5,13 +5,15 @@ Exibe filtros, KPIs, gráficos analíticos, resumos por categoria/mês/filial
 (mesma visão de CONTAS_A_PAGAR_ANALISE.xlsx) e exporta tudo para Excel.
 
 O endpoint /financeiro exclui sempre os tipos de título PA/PR/NDF (regra
-fixa). O período de vencimento (vencimento_de/vencimento_ate) é enviado à
-API como query string — os filtros "Vencimento De" e "Vencimento Até" já
-iniciam marcados com a data atual do sistema (mesmo padrão que a API assume
-quando o parâmetro não é enviado); o usuário pode alterar o período ou
-desmarcar antes de carregar. Os demais filtros desta tela (filial,
-fornecedor, tipo, tipo de operação e categoria) são aplicados no cliente,
-após o carregamento completo dos dados.
+fixa). O período de vencimento (vencimento_de/vencimento_ate) e o status
+("Em aberto"/"Vencido"/"Baixado") são enviados à API como query string — os
+filtros "Vencimento De" e "Vencimento Até" já iniciam marcados com a data
+atual do sistema (mesmo padrão que a API assume quando o parâmetro não é
+enviado); o usuário pode alterar o período ou desmarcar antes de carregar.
+Como o período padrão já começa hoje, para ver títulos "Vencido" é preciso
+recuar "Vencimento De". Os demais filtros desta tela (filial, fornecedor,
+tipo, tipo de operação e categoria) são aplicados no cliente, após o
+carregamento completo dos dados.
 
 A categoria de cada título não existe em nenhuma tabela do Protheus exposta
 pela API — é resolvida no cliente a partir de regras editáveis mantidas em
@@ -51,6 +53,14 @@ STATUS_COLORS: Dict[str, str] = {
     "Vencido":   "#e74c3c",
     "Baixado":   "#95a5a6",
 }
+
+# Rótulo exibido -> valor do parâmetro "status" aceito pelo endpoint /financeiro.
+STATUS_API_VALUES: Dict[str, str] = {
+    "Em aberto": "em_aberto",
+    "Vencido":   "vencido",
+    "Baixado":   "baixado",
+}
+STATUS_FILTRO_PADRAO = "(Todos)"
 
 CHART_COLORS = [
     "#2980b9", "#e74c3c", "#27ae60", "#f39c12", "#8e44ad",
@@ -210,7 +220,7 @@ class FinanceiroApp:
     def _build_periodo_frame(self) -> None:
         f = ttk.LabelFrame(
             self.root,
-            text="Período (define vencimento_de/vencimento_ate enviados à API — recarrega ao consultar)",
+            text="Período e status (define vencimento_de/vencimento_ate/status enviados à API — recarrega ao consultar)",
             padding=(10, 6),
         )
         f.pack(fill="x", padx=12, pady=(8, 3))
@@ -247,11 +257,18 @@ class FinanceiroApp:
         self._de_vcto_ate.set_date(date.today())
         self._de_vcto_ate.grid(row=0, column=3, sticky="w")
 
+        ttk.Label(f, text="Status:").grid(row=0, column=4, sticky="w", padx=(14, 3))
+        self._f_status = tk.StringVar(value=STATUS_FILTRO_PADRAO)
+        ttk.Combobox(
+            f, textvariable=self._f_status, width=14, state="readonly",
+            values=[STATUS_FILTRO_PADRAO, *STATUS_API_VALUES.keys()],
+        ).grid(row=0, column=5, sticky="w")
+
         ttk.Label(
             f,
-            text="(já iniciam na data de hoje, igual ao padrão da API; desmarque para não limitar)",
+            text="(período já inicia na data de hoje, igual ao padrão da API; desmarque para não limitar)",
             foreground="#7f8c8d",
-        ).grid(row=0, column=4, sticky="w", padx=(10, 0))
+        ).grid(row=0, column=6, sticky="w", padx=(10, 0))
 
     # ── filtros (aplicados no cliente, após o carregamento) ────────────────────
 
@@ -544,6 +561,8 @@ class FinanceiroApp:
             self._de_vcto_ate.get_date().strftime("%Y%m%d")
             if self._f_vcto_ate_on.get() else None
         )
+        status_label = self._f_status.get()
+        status = STATUS_API_VALUES.get(status_label)
 
         partes = []
         if vencimento_de:
@@ -551,16 +570,21 @@ class FinanceiroApp:
         if vencimento_ate:
             partes.append(f"até {self._f_vcto_ate.get()}")
         periodo = " ".join(partes) if partes else "sem limite de período"
+        if status:
+            periodo += f", status={status_label}"
         self._set_status(f"Consultando /financeiro na API… [{periodo}]", indeterminate=True)
         threading.Thread(
-            target=self._fetch_thread, args=(vencimento_de, vencimento_ate), daemon=True
+            target=self._fetch_thread, args=(vencimento_de, vencimento_ate, status), daemon=True
         ).start()
 
-    def _fetch_thread(self, vencimento_de: Optional[str], vencimento_ate: Optional[str]) -> None:
+    def _fetch_thread(
+        self, vencimento_de: Optional[str], vencimento_ate: Optional[str],
+        status: Optional[str],
+    ) -> None:
         try:
             client = self._make_client()
             items, total = client.get_all_financeiro(
-                vencimento_de=vencimento_de, vencimento_ate=vencimento_ate,
+                vencimento_de=vencimento_de, vencimento_ate=vencimento_ate, status=status,
                 progress_callback=self._on_progress)
             self.root.after(0, self._on_data_ready, items, total)
         except Exception as exc:
@@ -1042,8 +1066,9 @@ class FinanceiroApp:
     # ── utilitários ───────────────────────────────────────────────────────────
 
     def limpar(self) -> None:
-        # O período (Vencimento De/Até) fica fora deste botão: é enviado à API
-        # e só é reaplicado ao clicar em "Carregar da API" novamente.
+        # O período e o status (Vencimento De/Até/Status) ficam fora deste
+        # botão: são enviados à API e só são reaplicados ao clicar em
+        # "Carregar da API" novamente.
         for attr in ("_f_filial", "_f_forn", "_f_tipo", "_f_tipo_op", "_f_categoria"):
             getattr(self, attr).set("")
         if self._df_raw is not None:

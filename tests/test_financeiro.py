@@ -161,6 +161,83 @@ def test_filtro_vencimento_ate_via_query_string(client, auth_headers, db_session
     assert dados["items"][0]["numero"] == "000001"
 
 
+def test_filtro_status_baixado_via_query_string(client, auth_headers, db_session):
+    hoje = date.today().strftime("%Y%m%d")
+    db_session.add_all(
+        [
+            _fornecedor(),
+            _titulo(numero="000001", vencimento_real=hoje, data_baixa=hoje),
+            _titulo(numero="000002", vencimento_real=hoje, data_baixa=""),
+        ]
+    )
+    db_session.commit()
+
+    resposta = client.get("/financeiro/?status=baixado", headers=auth_headers)
+    dados = resposta.json()
+    assert dados["total"] == 1
+    assert dados["items"][0]["numero"] == "000001"
+
+
+def test_filtro_status_baixado_ignora_data_baixa_so_com_espacos(client, auth_headers, db_session):
+    hoje = date.today().strftime("%Y%m%d")
+    db_session.add_all(
+        [
+            _fornecedor(),
+            _titulo(numero="000001", vencimento_real=hoje, data_baixa="        "),
+        ]
+    )
+    db_session.commit()
+
+    resposta = client.get("/financeiro/?status=baixado", headers=auth_headers)
+    assert resposta.json()["total"] == 0
+
+    resposta = client.get("/financeiro/?status=em_aberto", headers=auth_headers)
+    assert resposta.json()["total"] == 1
+
+
+def test_filtro_status_em_aberto_via_query_string(client, auth_headers, db_session):
+    hoje = date.today().strftime("%Y%m%d")
+    db_session.add_all(
+        [
+            _fornecedor(),
+            _titulo(numero="000001", vencimento_real=hoje, data_baixa=""),
+            _titulo(numero="000002", vencimento_real=hoje, data_baixa=hoje),
+        ]
+    )
+    db_session.commit()
+
+    resposta = client.get("/financeiro/?status=em_aberto", headers=auth_headers)
+    dados = resposta.json()
+    assert dados["total"] == 1
+    assert dados["items"][0]["numero"] == "000001"
+
+
+def test_filtro_status_vencido_via_query_string(client, auth_headers, db_session):
+    # vencimento_de precisa ser recuado, senão o filtro padrão de período
+    # (vencimento_real >= hoje) já exclui o título vencido antes do status.
+    ontem = (date.today() - timedelta(days=1)).strftime("%Y%m%d")
+    hoje = date.today().strftime("%Y%m%d")
+    db_session.add_all(
+        [
+            _fornecedor(),
+            _titulo(numero="000001", vencimento_real=ontem, data_baixa=""),
+            _titulo(numero="000002", vencimento_real=hoje, data_baixa=""),
+        ]
+    )
+    db_session.commit()
+
+    resposta = client.get(
+        f"/financeiro/?vencimento_de={ontem}&status=vencido", headers=auth_headers)
+    dados = resposta.json()
+    assert dados["total"] == 1
+    assert dados["items"][0]["numero"] == "000001"
+
+
+def test_filtro_status_invalido_retorna_422(client, auth_headers):
+    resposta = client.get("/financeiro/?status=quitado", headers=auth_headers)
+    assert resposta.status_code == 422
+
+
 def test_metodos_de_escrita_nao_existem(client, auth_headers):
     assert client.post("/financeiro/", json={}, headers=auth_headers).status_code == 405
     assert client.put("/financeiro/", json={}, headers=auth_headers).status_code == 405

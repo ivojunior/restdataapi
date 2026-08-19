@@ -32,18 +32,22 @@ class APIClient:
         limit: int = 200,
         vencimento_de: Optional[str] = None,
         vencimento_ate: Optional[str] = None,
+        status: Optional[str] = None,
     ) -> Dict:
         params: Dict[str, Any] = {"skip": skip, "limit": limit}
         if vencimento_de:
             params["vencimento_de"] = vencimento_de
         if vencimento_ate:
             params["vencimento_ate"] = vencimento_ate
+        if status:
+            params["status"] = status
         return self._get("/financeiro/", params)
 
     def get_all_financeiro(
         self,
         vencimento_de: Optional[str] = None,
         vencimento_ate: Optional[str] = None,
+        status: Optional[str] = None,
         progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Tuple[List[Dict], int]:
         """Busca todas as páginas do relatório financeiro.
@@ -51,9 +55,11 @@ class APIClient:
         O endpoint /financeiro exclui sempre os tipos de título PA/PR/NDF
         (regra fixa). O período (vencimento_de/vencimento_ate) é
         parametrizável — sem vencimento_de, a API assume a data atual do
-        sistema; sem vencimento_ate, não há limite superior. Qualquer outro
-        filtro (filial, fornecedor, tipo etc.) é aplicado no cliente, após o
-        carregamento completo dos dados.
+        sistema; sem vencimento_ate, não há limite superior. `status`
+        ("em_aberto", "vencido" ou "baixado") filtra pelo mesmo status
+        calculado nos clients desktop. Qualquer outro filtro (filial,
+        fornecedor, tipo etc.) é aplicado no cliente, após o carregamento
+        completo dos dados.
         """
         all_items: List[Dict] = []
         skip = 0
@@ -61,8 +67,8 @@ class APIClient:
 
         while True:
             result = self.get_financeiro_page(
-                skip=skip, limit=limit,
-                vencimento_de=vencimento_de, vencimento_ate=vencimento_ate)
+                skip=skip, limit=limit, vencimento_de=vencimento_de,
+                vencimento_ate=vencimento_ate, status=status)
             items = result["items"]
             total = result["total"]
             all_items.extend(items)

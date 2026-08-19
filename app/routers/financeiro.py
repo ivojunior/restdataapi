@@ -1,7 +1,8 @@
+import enum
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import and_
+from sqlalchemy import and_, func, not_, or_
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, Query
@@ -26,7 +27,27 @@ router = APIRouter(
 _TIPOS_EXCLUIDOS = ("PA", "PR", "NDF")
 
 
-def _query_financeiro(db: Session, vencimento_de: str, vencimento_ate: Optional[str]):
+class StatusFinanceiro(str, enum.Enum):
+    """Mesma classificação já usada nos clients desktop (veja _status_from_row):
+    baixado tem prioridade sobre vencido, que por sua vez depende da data atual."""
+
+    em_aberto = "em_aberto"
+    vencido = "vencido"
+    baixado = "baixado"
+
+
+def _sem_baixa(coluna):
+    """E2_BAIXA é CHAR(8) do Protheus: 'sem baixa' pode vir como NULL, string
+    vazia ou só espaços — nunca apenas `coluna == ""`."""
+    return or_(coluna.is_(None), func.ltrim(func.rtrim(coluna)) == "")
+
+
+def _query_financeiro(
+    db: Session,
+    vencimento_de: str,
+    vencimento_ate: Optional[str],
+    status: Optional[StatusFinanceiro] = None,
+):
     query = (
         db.query(TituloPagar, TipoOperacao.descricao)
         .join(
@@ -54,6 +75,21 @@ def _query_financeiro(db: Session, vencimento_de: str, vencimento_ate: Optional[
     )
     if vencimento_ate:
         query = query.filter(TituloPagar.vencimento_real <= vencimento_ate)
+
+    if status == StatusFinanceiro.baixado:
+        query = query.filter(not_(_sem_baixa(TituloPagar.data_baixa)))
+    elif status == StatusFinanceiro.vencido:
+        hoje = date.today().strftime("%Y%m%d")
+        query = query.filter(
+            _sem_baixa(TituloPagar.data_baixa),
+            TituloPagar.vencimento_real < hoje,
+        )
+    elif status == StatusFinanceiro.em_aberto:
+        hoje = date.today().strftime("%Y%m%d")
+        query = query.filter(
+            _sem_baixa(TituloPagar.data_baixa),
+            TituloPagar.vencimento_real >= hoje,
+        )
     return query
 
 
@@ -71,10 +107,18 @@ def listar_financeiro(
         description="Data máxima de vencimento, formato AAAAMMDD (E2_VENCREA <= vencimento_ate). "
         "Sem o parâmetro, não limita o vencimento máximo.",
     ),
+    status: Optional[StatusFinanceiro] = Query(
+        None,
+        description="Filtra pelo status do título: 'em_aberto' (sem data de baixa e "
+        "vencimento_real >= hoje), 'vencido' (sem data de baixa e vencimento_real < hoje) "
+        "ou 'baixado' (com data de baixa preenchida). Sem o parâmetro, não filtra por status. "
+        "Como vencimento_de já começa em hoje por padrão, para ver títulos vencidos ajuste "
+        "vencimento_de para uma data anterior.",
+    ),
     db: Session = Depends(get_db),
 ):
     data_de = vencimento_de or date.today().strftime("%Y%m%d")
-    query = _query_financeiro(db, data_de, vencimento_ate)
+    query = _query_financeiro(db, data_de, vencimento_ate, status)
     total = query.count()
     # order_by aplicado apenas aqui (após o count()): o MSSQL exige ORDER BY
     # junto de OFFSET/LIMIT, mas não aceita ORDER BY dentro da subquery que o
