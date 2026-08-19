@@ -42,6 +42,15 @@ CHART_COLORS = [
     "#16a085", "#d35400", "#2c3e50", "#c0392b", "#1abc9c",
 ]
 
+# O campo "carreta" (DAK_ACECAR, vindo como "carreta" na resposta da API)
+# carrega um código de status da carga, não uma placa — mapa de exibição.
+STATUS_CARGA: Dict[str, str] = {
+    "1": "Faturada",
+    "2": "Conf Cega",
+    "7": "Fechada",
+    "3": "Prestação Títulos",
+}
+
 TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
     ("filial",       "Filial",      55,  "c"),
     ("codigo",       "Carga",       75,  "c"),
@@ -50,7 +59,7 @@ TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
     ("nome_cliente", "Cliente",    220,  "w"),
     ("nota_fiscal",  "Nota Fiscal", 90,  "c"),
     ("caminhao",     "Caminhão",    90,  "c"),
-    ("carreta",      "Carreta",     90,  "c"),
+    ("carreta",      "Status",     130,  "c"),
     ("peso",         "Peso (kg)",  110,  "e"),
     ("valor",        "Valor (R$)", 120,  "e"),
 ]
@@ -77,6 +86,11 @@ def _fmt_date(s) -> str:
     if len(s) == 8 and s.isdigit():
         return f"{s[6:8]}/{s[4:6]}/{s[:4]}"
     return s or "—"
+
+
+def _fmt_status(v) -> str:
+    s = str(v or "").strip()
+    return STATUS_CARGA.get(s, s or "—")
 
 
 # ── aplicação principal ───────────────────────────────────────────────────────
@@ -107,9 +121,9 @@ class CargasApp:
 
         s.configure("TFrame", background=BG)
         s.configure("White.TFrame", background=WHITE)
-        s.configure("TLabel", background=BG, font=("Segoe UI", 9))
-        s.configure("TLabelframe", background=BG, font=("Segoe UI", 9, "bold"))
-        s.configure("TLabelframe.Label", background=BG, font=("Segoe UI", 9, "bold"),
+        s.configure("TLabel", background=BG, font=("Segoe UI", 10))
+        s.configure("TLabelframe", background=BG, font=("Segoe UI", 10, "bold"))
+        s.configure("TLabelframe.Label", background=BG, font=("Segoe UI", 10, "bold"),
                     foreground=PRIMARY)
 
         for name, bg, fg, hover in [
@@ -119,17 +133,17 @@ class CargasApp:
         ]:
             s.configure(f"{name}.TButton",
                         background=bg, foreground=fg,
-                        font=("Segoe UI", 9, "bold"), padding=(12, 5))
+                        font=("Segoe UI", 10, "bold"), padding=(12, 5))
             s.map(f"{name}.TButton", background=[("active", hover), ("pressed", bg)])
 
         s.configure("TEntry", fieldbackground=WHITE, padding=4)
         s.configure("TNotebook", background=BG)
-        s.configure("TNotebook.Tab", padding=(12, 6), font=("Segoe UI", 9))
+        s.configure("TNotebook.Tab", padding=(12, 6), font=("Segoe UI", 10))
 
         s.configure("Treeview", background=WHITE, fieldbackground=WHITE,
-                    font=("Segoe UI", 9), rowheight=22)
+                    font=("Segoe UI", 10), rowheight=25)
         s.configure("Treeview.Heading",
-                    font=("Segoe UI", 9, "bold"),
+                    font=("Segoe UI", 10, "bold"),
                     background=PRIMARY, foreground=WHITE)
         s.map("Treeview",
               background=[("selected", ACCENT)],
@@ -253,12 +267,12 @@ class CargasApp:
             card.grid(row=0, column=i, sticky="nsew", padx=4, pady=2, ipady=10)
 
             tk.Label(card, text=label, bg="#ffffff",
-                     font=("Segoe UI", 8), fg="#7f8c8d").pack(pady=(4, 0))
+                     font=("Segoe UI", 9), fg="#7f8c8d").pack(pady=(4, 0))
 
             var = tk.StringVar(value="—")
             self._kpi_vars[key] = var
             tk.Label(card, textvariable=var, bg="#ffffff",
-                     font=("Segoe UI", 12, "bold"), fg=fg).pack()
+                     font=("Segoe UI", 14, "bold"), fg=fg).pack()
 
         for i in range(len(cards_cfg)):
             outer.columnconfigure(i, weight=1)
@@ -286,10 +300,10 @@ class CargasApp:
         self._build_data_tab(tab_dados)
 
     def _build_charts_tab(self, parent: ttk.Frame) -> None:
-        self._fig = Figure(figsize=(13, 6), dpi=96, facecolor="#f0f2f5")
+        self._fig = Figure(figsize=(13, 6.4), dpi=100, facecolor="#f0f2f5")
         self._axes = self._fig.subplots(2, 2)
-        self._fig.subplots_adjust(left=0.09, right=0.97, top=0.91,
-                                  bottom=0.16, hspace=0.55, wspace=0.4)
+        self._fig.subplots_adjust(left=0.12, right=0.97, top=0.9,
+                                  bottom=0.18, hspace=0.65, wspace=0.42)
         self._canvas = FigureCanvasTkAgg(self._fig, master=parent)
         self._canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=4)
         self._draw_empty_charts()
@@ -325,12 +339,12 @@ class CargasApp:
 
         self._status_var = tk.StringVar(value="Pronto.")
         tk.Label(bar, textvariable=self._status_var,
-                 bg="#dde1e7", font=("Segoe UI", 8), anchor="w").pack(
+                 bg="#dde1e7", font=("Segoe UI", 9), anchor="w").pack(
             side="left", padx=8, pady=2)
 
         self._pct_var = tk.StringVar()
         tk.Label(bar, textvariable=self._pct_var,
-                 bg="#dde1e7", font=("Segoe UI", 8)).pack(side="right", padx=4)
+                 bg="#dde1e7", font=("Segoe UI", 9)).pack(side="right", padx=4)
 
         self._progress = ttk.Progressbar(bar, mode="determinate", length=200)
         self._progress.pack(side="right", padx=8, pady=3)
@@ -475,7 +489,7 @@ class CargasApp:
         for ax in self._axes.flat:
             ax.clear()
             ax.text(0.5, 0.5, "Sem dados — clique em \"Carregar da API\"",
-                    ha="center", va="center", color="#aab7b8", fontsize=9)
+                    ha="center", va="center", color="#aab7b8", fontsize=10.5)
             ax.set_facecolor("#f8f9fa")
             ax.axis("off")
         self._canvas.draw()
@@ -510,17 +524,18 @@ class CargasApp:
             color=bar_colors[::-1], height=0.65, edgecolor="none",
         )
         ax_top_cliente.set_title("Top 10 Clientes — Valor de Frete",
-                                 fontsize=9, fontweight="bold", pad=10)
-        ax_top_cliente.set_xlabel("Valor (R$)", fontsize=7)
-        ax_top_cliente.tick_params(axis="y", labelsize=7)
-        ax_top_cliente.tick_params(axis="x", labelsize=6)
+                                 fontsize=13, fontweight="bold", pad=12)
+        ax_top_cliente.set_xlabel("Valor (R$)", fontsize=10.5)
+        ax_top_cliente.tick_params(axis="y", labelsize=9)
+        ax_top_cliente.tick_params(axis="x", labelsize=9)
         ax_top_cliente.xaxis.set_major_formatter(brl_fmt)
         ax_top_cliente.set_facecolor("#fafafa")
+        ax_top_cliente.margins(x=0.2)
         for bar in hbars:
             w = bar.get_width()
             ax_top_cliente.text(
                 w * 1.01, bar.get_y() + bar.get_height() / 2,
-                _brl(w), va="center", fontsize=6, color="#555",
+                _brl(w), va="center", fontsize=9, color="#555",
             )
 
         # ── Gráfico 2: pizza — Valor Total por Filial ─────────────────────
@@ -532,25 +547,25 @@ class CargasApp:
             autopct="%1.1f%%",
             colors=pie_colors,
             startangle=90,
-            textprops={"fontsize": 8},
+            textprops={"fontsize": 9.5},
             wedgeprops={"edgecolor": "white", "linewidth": 1.5},
         )
         for at in autotexts:
-            at.set_fontsize(7.5)
+            at.set_fontsize(9)
         ax_filial_valor.set_title("Valor Total por Filial",
-                                  fontsize=9, fontweight="bold", pad=10)
+                                  fontsize=13, fontweight="bold", pad=12)
 
         # ── Gráfico 3: barras — Nº de Cargas por Data ──────────────────────
-        by_data = df.groupby("data").size().sort_index().tail(20)
+        by_data = df.groupby("data").size().sort_index().tail(12)
         labels_data = [_fmt_date(d) for d in by_data.index]
         ax_evolucao.bar(range(len(by_data)), by_data.values,
                         color="#2980b9", width=0.7, edgecolor="none")
         ax_evolucao.set_xticks(range(len(by_data)))
-        ax_evolucao.set_xticklabels(labels_data, rotation=45, ha="right", fontsize=6.5)
-        ax_evolucao.set_title("Nº de Cargas por Data (últimas 20 datas)",
-                              fontsize=9, fontweight="bold", pad=10)
-        ax_evolucao.set_ylabel("Cargas", fontsize=7)
-        ax_evolucao.tick_params(axis="y", labelsize=7)
+        ax_evolucao.set_xticklabels(labels_data, rotation=45, ha="right", fontsize=9)
+        ax_evolucao.set_title("Nº de Cargas por Data (últimas 12 datas)",
+                              fontsize=13, fontweight="bold", pad=12)
+        ax_evolucao.set_ylabel("Cargas", fontsize=10.5)
+        ax_evolucao.tick_params(axis="y", labelsize=9.5)
         ax_evolucao.set_facecolor("#fafafa")
 
         # ── Gráfico 4: barras horizontais — Top 10 Caminhões por Peso ─────
@@ -567,16 +582,17 @@ class CargasApp:
             color=bar_colors_cam[::-1], height=0.65, edgecolor="none",
         )
         ax_top_caminhao.set_title("Top 10 Caminhões — Peso Transportado",
-                                  fontsize=9, fontweight="bold", pad=10)
-        ax_top_caminhao.set_xlabel("Peso (kg)", fontsize=7)
-        ax_top_caminhao.tick_params(axis="y", labelsize=7)
-        ax_top_caminhao.tick_params(axis="x", labelsize=6)
+                                  fontsize=13, fontweight="bold", pad=12)
+        ax_top_caminhao.set_xlabel("Peso (kg)", fontsize=10.5)
+        ax_top_caminhao.tick_params(axis="y", labelsize=9)
+        ax_top_caminhao.tick_params(axis="x", labelsize=9)
         ax_top_caminhao.set_facecolor("#fafafa")
+        ax_top_caminhao.margins(x=0.2)
         for bar in hbars_cam:
             w = bar.get_width()
             ax_top_caminhao.text(
                 w * 1.01, bar.get_y() + bar.get_height() / 2,
-                _peso(w), va="center", fontsize=6, color="#555",
+                _peso(w), va="center", fontsize=9, color="#555",
             )
 
         self._canvas.draw()
@@ -600,7 +616,7 @@ class CargasApp:
                 row.get("nome_cliente", ""),
                 row.get("nota_fiscal", ""),
                 row.get("caminhao", ""),
-                row.get("carreta", ""),
+                _fmt_status(row.get("carreta", "")),
                 _peso(row.get("peso", 0)),
                 _brl(row.get("valor", 0)),
             ))
@@ -725,7 +741,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Cliente",       "nome_cliente", 34),
         ("Nota Fiscal",   "nota_fiscal",  14),
         ("Caminhão",      "caminhao",     14),
-        ("Carreta",       "carreta",      14),
+        ("Status",        "carreta",      18),
         ("Peso (kg)",     "peso",         14),
         ("Valor (R$)",    "valor",        16),
     ]
@@ -741,6 +757,8 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
             val = row.get(field)
             if field == "data":
                 val = _fmt_date(val)
+            elif field == "carreta":
+                val = _fmt_status(val)
             cell = ws1.cell(row=ri, column=ci, value=val)
             cell.border = BORDER
             if field == "valor":

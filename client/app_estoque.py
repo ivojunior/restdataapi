@@ -70,16 +70,6 @@ def _brl(v) -> str:
 
 def _qtd(v) -> str:
     try:
-        s = f"{float(v):,.4f}"
-        if "." in s:
-            s = s.rstrip("0").rstrip(".")
-        return s.replace(",", "X").replace(".", ",").replace("X", ".")
-    except Exception:
-        return "—"
-
-
-def _qtd2(v) -> str:
-    try:
         return f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except Exception:
         return "—"
@@ -113,9 +103,9 @@ class EstoqueApp:
 
         s.configure("TFrame", background=BG)
         s.configure("White.TFrame", background=WHITE)
-        s.configure("TLabel", background=BG, font=("Segoe UI", 9))
-        s.configure("TLabelframe", background=BG, font=("Segoe UI", 9, "bold"))
-        s.configure("TLabelframe.Label", background=BG, font=("Segoe UI", 9, "bold"),
+        s.configure("TLabel", background=BG, font=("Segoe UI", 10))
+        s.configure("TLabelframe", background=BG, font=("Segoe UI", 10, "bold"))
+        s.configure("TLabelframe.Label", background=BG, font=("Segoe UI", 10, "bold"),
                     foreground=PRIMARY)
 
         for name, bg, fg, hover in [
@@ -125,17 +115,17 @@ class EstoqueApp:
         ]:
             s.configure(f"{name}.TButton",
                         background=bg, foreground=fg,
-                        font=("Segoe UI", 9, "bold"), padding=(12, 5))
+                        font=("Segoe UI", 10, "bold"), padding=(12, 5))
             s.map(f"{name}.TButton", background=[("active", hover), ("pressed", bg)])
 
         s.configure("TEntry", fieldbackground=WHITE, padding=4)
         s.configure("TNotebook", background=BG)
-        s.configure("TNotebook.Tab", padding=(12, 6), font=("Segoe UI", 9))
+        s.configure("TNotebook.Tab", padding=(12, 6), font=("Segoe UI", 10))
 
         s.configure("Treeview", background=WHITE, fieldbackground=WHITE,
-                    font=("Segoe UI", 9), rowheight=22)
+                    font=("Segoe UI", 10), rowheight=25)
         s.configure("Treeview.Heading",
-                    font=("Segoe UI", 9, "bold"),
+                    font=("Segoe UI", 10, "bold"),
                     background=PRIMARY, foreground=WHITE)
         s.map("Treeview",
               background=[("selected", ACCENT)],
@@ -256,12 +246,12 @@ class EstoqueApp:
             card.grid(row=0, column=i, sticky="nsew", padx=4, pady=2, ipady=10)
 
             tk.Label(card, text=label, bg="#ffffff",
-                     font=("Segoe UI", 8), fg="#7f8c8d").pack(pady=(4, 0))
+                     font=("Segoe UI", 9), fg="#7f8c8d").pack(pady=(4, 0))
 
             var = tk.StringVar(value="—")
             self._kpi_vars[key] = var
             tk.Label(card, textvariable=var, bg="#ffffff",
-                     font=("Segoe UI", 12, "bold"), fg=fg).pack()
+                     font=("Segoe UI", 14, "bold"), fg=fg).pack()
 
         for i in range(len(cards_cfg)):
             outer.columnconfigure(i, weight=1)
@@ -289,10 +279,10 @@ class EstoqueApp:
         self._build_data_tab(tab_dados)
 
     def _build_charts_tab(self, parent: ttk.Frame) -> None:
-        self._fig = Figure(figsize=(13, 6), dpi=96, facecolor="#f0f2f5")
+        self._fig = Figure(figsize=(13, 6.4), dpi=100, facecolor="#f0f2f5")
         self._axes = self._fig.subplots(2, 2)
-        self._fig.subplots_adjust(left=0.09, right=0.97, top=0.91,
-                                  bottom=0.13, hspace=0.52, wspace=0.4)
+        self._fig.subplots_adjust(left=0.17, right=0.97, top=0.9,
+                                  bottom=0.14, hspace=0.62, wspace=0.42)
         self._canvas = FigureCanvasTkAgg(self._fig, master=parent)
         self._canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=4)
         self._draw_empty_charts()
@@ -328,12 +318,12 @@ class EstoqueApp:
 
         self._status_var = tk.StringVar(value="Pronto.")
         tk.Label(bar, textvariable=self._status_var,
-                 bg="#dde1e7", font=("Segoe UI", 8), anchor="w").pack(
+                 bg="#dde1e7", font=("Segoe UI", 9), anchor="w").pack(
             side="left", padx=8, pady=2)
 
         self._pct_var = tk.StringVar()
         tk.Label(bar, textvariable=self._pct_var,
-                 bg="#dde1e7", font=("Segoe UI", 8)).pack(side="right", padx=4)
+                 bg="#dde1e7", font=("Segoe UI", 9)).pack(side="right", padx=4)
 
         self._progress = ttk.Progressbar(bar, mode="determinate", length=200)
         self._progress.pack(side="right", padx=8, pady=3)
@@ -466,7 +456,7 @@ class EstoqueApp:
 
         self._kpi_vars["total_itens"].set(f'{len(df):,}'.replace(",", "."))
         self._kpi_vars["filiais"].set(f'{df["filial"].nunique():,}'.replace(",", "."))
-        self._kpi_vars["qtd_total"].set(_qtd2(df["quantidade"].sum()))
+        self._kpi_vars["qtd_total"].set(_qtd(df["quantidade"].sum()))
         self._kpi_vars["valor_total"].set(_brl(valor_total))
         self._kpi_vars["valor_medio"].set(_brl(valor_medio))
 
@@ -476,7 +466,7 @@ class EstoqueApp:
         for ax in self._axes.flat:
             ax.clear()
             ax.text(0.5, 0.5, "Sem dados — clique em \"Carregar da API\"",
-                    ha="center", va="center", color="#aab7b8", fontsize=9)
+                    ha="center", va="center", color="#aab7b8", fontsize=10.5)
             ax.set_facecolor("#f8f9fa")
             ax.axis("off")
         self._canvas.draw()
@@ -497,12 +487,12 @@ class EstoqueApp:
             lambda x, _: f"R${x/1000:.0f}k" if abs(x) >= 1000 else f"R${x:.0f}"
         )
 
-        # ── Gráfico 1: barras horizontais — Top 15 Produtos por Valor ─────
+        # ── Gráfico 1: barras horizontais — Top 10 Produtos por Valor ─────
         by_produto_valor = (
-            df.assign(rotulo=df["codigo_produto"] + " — " + df["descricao_produto"].fillna(""))
+            df.assign(rotulo=df["codigo_produto"] + " — " + df["descricao_produto"].fillna("").str.slice(0, 22))
             .groupby("rotulo")["valor_atual"]
             .sum()
-            .nlargest(15)
+            .nlargest(10)
             .sort_values(ascending=True)
         )
         bar_colors = CHART_COLORS[:len(by_produto_valor)]
@@ -511,18 +501,19 @@ class EstoqueApp:
             color=(bar_colors * (len(by_produto_valor) // len(bar_colors) + 1))[::-1][:len(by_produto_valor)],
             height=0.65, edgecolor="none",
         )
-        ax_top_valor.set_title("Top 15 Produtos — Valor em Estoque",
-                               fontsize=9, fontweight="bold", pad=10)
-        ax_top_valor.set_xlabel("Valor (R$)", fontsize=7)
-        ax_top_valor.tick_params(axis="y", labelsize=6.5)
-        ax_top_valor.tick_params(axis="x", labelsize=6)
+        ax_top_valor.set_title("Top 10 Produtos — Valor em Estoque",
+                               fontsize=13, fontweight="bold", pad=12)
+        ax_top_valor.set_xlabel("Valor (R$)", fontsize=10.5)
+        ax_top_valor.tick_params(axis="y", labelsize=9)
+        ax_top_valor.tick_params(axis="x", labelsize=9)
         ax_top_valor.xaxis.set_major_formatter(brl_fmt)
         ax_top_valor.set_facecolor("#fafafa")
+        ax_top_valor.margins(x=0.2)
         for bar in hbars:
             w = bar.get_width()
             ax_top_valor.text(
                 w * 1.01, bar.get_y() + bar.get_height() / 2,
-                _brl(w), va="center", fontsize=6, color="#555",
+                _brl(w), va="center", fontsize=9, color="#555",
             )
 
         # ── Gráfico 2: pizza — Valor Total por Filial ─────────────────────
@@ -534,20 +525,20 @@ class EstoqueApp:
             autopct="%1.1f%%",
             colors=pie_colors,
             startangle=90,
-            textprops={"fontsize": 8},
+            textprops={"fontsize": 9.5},
             wedgeprops={"edgecolor": "white", "linewidth": 1.5},
         )
         for at in autotexts:
-            at.set_fontsize(7.5)
+            at.set_fontsize(9)
         ax_filial_valor.set_title("Valor Total por Filial",
-                                  fontsize=9, fontweight="bold", pad=10)
+                                  fontsize=13, fontweight="bold", pad=12)
 
-        # ── Gráfico 3: barras horizontais — Top 15 Produtos por Quantidade ─
+        # ── Gráfico 3: barras horizontais — Top 10 Produtos por Quantidade ─
         by_produto_qtd = (
-            df.assign(rotulo=df["codigo_produto"] + " — " + df["descricao_produto"].fillna(""))
+            df.assign(rotulo=df["codigo_produto"] + " — " + df["descricao_produto"].fillna("").str.slice(0, 22))
             .groupby("rotulo")["quantidade"]
             .sum()
-            .nlargest(15)
+            .nlargest(10)
             .sort_values(ascending=True)
         )
         bar_colors_qtd = CHART_COLORS[:len(by_produto_qtd)]
@@ -556,17 +547,18 @@ class EstoqueApp:
             color=(bar_colors_qtd * (len(by_produto_qtd) // len(bar_colors_qtd) + 1))[::-1][:len(by_produto_qtd)],
             height=0.65, edgecolor="none",
         )
-        ax_top_qtd.set_title("Top 15 Produtos — Quantidade em Estoque",
-                             fontsize=9, fontweight="bold", pad=10)
-        ax_top_qtd.set_xlabel("Quantidade", fontsize=7)
-        ax_top_qtd.tick_params(axis="y", labelsize=6.5)
-        ax_top_qtd.tick_params(axis="x", labelsize=6)
+        ax_top_qtd.set_title("Top 10 Produtos — Quantidade em Estoque",
+                             fontsize=13, fontweight="bold", pad=12)
+        ax_top_qtd.set_xlabel("Quantidade", fontsize=10.5)
+        ax_top_qtd.tick_params(axis="y", labelsize=9)
+        ax_top_qtd.tick_params(axis="x", labelsize=9)
         ax_top_qtd.set_facecolor("#fafafa")
+        ax_top_qtd.margins(x=0.2)
         for bar in hbars_qtd:
             w = bar.get_width()
             ax_top_qtd.text(
                 w * 1.01, bar.get_y() + bar.get_height() / 2,
-                _qtd(w), va="center", fontsize=6, color="#555",
+                _qtd(w), va="center", fontsize=9, color="#555",
             )
 
         # ── Gráfico 4: barras — Quantidade Total por Filial ────────────────
@@ -575,9 +567,9 @@ class EstoqueApp:
         ax_filial_qtd.bar(by_filial_qtd.index, by_filial_qtd.values,
                           color=bar_clrs_filial, width=0.6, edgecolor="none")
         ax_filial_qtd.set_title("Quantidade Total por Filial",
-                                fontsize=9, fontweight="bold", pad=10)
-        ax_filial_qtd.set_ylabel("Quantidade", fontsize=7)
-        ax_filial_qtd.tick_params(axis="both", labelsize=7)
+                                fontsize=13, fontweight="bold", pad=12)
+        ax_filial_qtd.set_ylabel("Quantidade", fontsize=10.5)
+        ax_filial_qtd.tick_params(axis="both", labelsize=9.5)
         ax_filial_qtd.set_facecolor("#fafafa")
 
         self._canvas.draw()
@@ -697,7 +689,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     RIGHT     = Alignment(horizontal="right",  vertical="center")
     LEFT      = Alignment(horizontal="left",   vertical="center")
     BRL       = '#,##0.00'
-    QTD_FMT   = '#,##0.0000'
+    QTD_FMT   = '#,##0.00'
     PCT       = '0.0%'
     BOLD10    = Font(bold=True, name="Calibri", size=10)
 

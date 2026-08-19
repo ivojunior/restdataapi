@@ -176,7 +176,7 @@ Além da API, o diretório `client/` traz aplicações desktop (Tkinter) que con
 
 | Script                     | Endpoint            | Observação |
 |-----------------------------|---------------------|------------|
-| `client/app.py`             | `/financeiro/`      | `vencimento_de`/`vencimento_ate` já iniciam marcados com a data atual (mesmo padrão da API); demais filtros são aplicados no cliente. |
+| `client/app_financeiro.py`  | `/financeiro/`      | `vencimento_de`/`vencimento_ate` já iniciam marcados com a data atual (mesmo padrão da API); demais filtros são aplicados no cliente. |
 | `client/app_estoque.py`     | `/saldos-estoque/`  | `tipo_produto`/`local` resolvidos por um seletor de "Tipo de Estoque". |
 | `client/app_cargas.py`      | `/cargas/`          | `data_inicial` é opcional (a API assume a data atual quando ausente); o seletor de data desta tela já inicia na data de hoje, e o usuário pode trocá-la antes de consultar. |
 

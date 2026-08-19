@@ -144,9 +144,9 @@ class FinanceiroApp:
 
         s.configure("TFrame", background=BG)
         s.configure("White.TFrame", background=WHITE)
-        s.configure("TLabel", background=BG, font=("Segoe UI", 9))
-        s.configure("TLabelframe", background=BG, font=("Segoe UI", 9, "bold"))
-        s.configure("TLabelframe.Label", background=BG, font=("Segoe UI", 9, "bold"),
+        s.configure("TLabel", background=BG, font=("Segoe UI", 10))
+        s.configure("TLabelframe", background=BG, font=("Segoe UI", 10, "bold"))
+        s.configure("TLabelframe.Label", background=BG, font=("Segoe UI", 10, "bold"),
                     foreground=PRIMARY)
 
         for name, bg, fg, hover in [
@@ -156,17 +156,17 @@ class FinanceiroApp:
         ]:
             s.configure(f"{name}.TButton",
                         background=bg, foreground=fg,
-                        font=("Segoe UI", 9, "bold"), padding=(12, 5))
+                        font=("Segoe UI", 10, "bold"), padding=(12, 5))
             s.map(f"{name}.TButton", background=[("active", hover), ("pressed", bg)])
 
         s.configure("TEntry", fieldbackground=WHITE, padding=4)
         s.configure("TNotebook", background=BG)
-        s.configure("TNotebook.Tab", padding=(12, 6), font=("Segoe UI", 9))
+        s.configure("TNotebook.Tab", padding=(12, 6), font=("Segoe UI", 10))
 
         s.configure("Treeview", background=WHITE, fieldbackground=WHITE,
-                    font=("Segoe UI", 9), rowheight=22)
+                    font=("Segoe UI", 10), rowheight=25)
         s.configure("Treeview.Heading",
-                    font=("Segoe UI", 9, "bold"),
+                    font=("Segoe UI", 10, "bold"),
                     background=PRIMARY, foreground=WHITE)
         s.map("Treeview",
               background=[("selected", ACCENT)],
@@ -326,12 +326,12 @@ class FinanceiroApp:
             card.grid(row=0, column=i, sticky="nsew", padx=4, pady=2, ipady=10)
 
             tk.Label(card, text=label, bg="#ffffff",
-                     font=("Segoe UI", 8), fg="#7f8c8d").pack(pady=(4, 0))
+                     font=("Segoe UI", 9), fg="#7f8c8d").pack(pady=(4, 0))
 
             var = tk.StringVar(value="—")
             self._kpi_vars[key] = var
             tk.Label(card, textvariable=var, bg="#ffffff",
-                     font=("Segoe UI", 12, "bold"), fg=fg).pack()
+                     font=("Segoe UI", 14, "bold"), fg=fg).pack()
 
         for i in range(len(cards_cfg)):
             outer.columnconfigure(i, weight=1)
@@ -371,10 +371,10 @@ class FinanceiroApp:
         self._build_filial_tab(tab_filial)
 
     def _build_charts_tab(self, parent: ttk.Frame) -> None:
-        self._fig = Figure(figsize=(13, 6), dpi=96, facecolor="#f0f2f5")
+        self._fig = Figure(figsize=(13, 6.4), dpi=100, facecolor="#f0f2f5")
         self._axes = self._fig.subplots(2, 2)
-        self._fig.subplots_adjust(left=0.07, right=0.97, top=0.91,
-                                  bottom=0.13, hspace=0.52, wspace=0.38)
+        self._fig.subplots_adjust(left=0.1, right=0.97, top=0.9,
+                                  bottom=0.14, hspace=0.62, wspace=0.42)
         self._canvas = FigureCanvasTkAgg(self._fig, master=parent)
         self._canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=4)
         self._draw_empty_charts()
@@ -435,9 +435,9 @@ class FinanceiroApp:
     def _build_summary_chart(parent: tk.Widget, figsize=(13, 4.2)):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True, padx=4, pady=(2, 4))
-        fig = Figure(figsize=figsize, dpi=96, facecolor="#f0f2f5")
+        fig = Figure(figsize=figsize, dpi=100, facecolor="#f0f2f5")
         ax = fig.add_subplot(111)
-        fig.subplots_adjust(left=0.22, right=0.96, top=0.90, bottom=0.12)
+        fig.subplots_adjust(left=0.24, right=0.96, top=0.88, bottom=0.14)
         canvas = FigureCanvasTkAgg(fig, master=frame)
         canvas.get_tk_widget().pack(fill="both", expand=True)
         return fig, ax, canvas
@@ -446,7 +446,7 @@ class FinanceiroApp:
     def _draw_empty_ax(ax, canvas: FigureCanvasTkAgg) -> None:
         ax.clear()
         ax.text(0.5, 0.5, "Sem dados — clique em \"Carregar da API\"",
-                ha="center", va="center", color="#aab7b8", fontsize=9)
+                ha="center", va="center", color="#aab7b8", fontsize=10.5)
         ax.set_facecolor("#f8f9fa")
         ax.axis("off")
         canvas.draw()
@@ -485,9 +485,9 @@ class FinanceiroApp:
 
         chart_frame = ttk.Frame(parent)
         chart_frame.pack(fill="both", expand=True, padx=4, pady=(2, 4))
-        self._fig_evolucao = Figure(figsize=(13, 3.8), dpi=96, facecolor="#f0f2f5")
+        self._fig_evolucao = Figure(figsize=(13, 4.1), dpi=100, facecolor="#f0f2f5")
         self._ax_evolucao = self._fig_evolucao.add_subplot(111)
-        self._fig_evolucao.subplots_adjust(left=0.07, right=0.98, top=0.88, bottom=0.2)
+        self._fig_evolucao.subplots_adjust(left=0.08, right=0.98, top=0.87, bottom=0.24)
         self._canvas_evolucao = FigureCanvasTkAgg(self._fig_evolucao, master=chart_frame)
         self._canvas_evolucao.get_tk_widget().pack(fill="both", expand=True)
         self._draw_empty_ax(self._ax_evolucao, self._canvas_evolucao)
@@ -500,12 +500,12 @@ class FinanceiroApp:
 
         self._status_var = tk.StringVar(value="Pronto.")
         tk.Label(bar, textvariable=self._status_var,
-                 bg="#dde1e7", font=("Segoe UI", 8), anchor="w").pack(
+                 bg="#dde1e7", font=("Segoe UI", 9), anchor="w").pack(
             side="left", padx=8, pady=2)
 
         self._pct_var = tk.StringVar()
         tk.Label(bar, textvariable=self._pct_var,
-                 bg="#dde1e7", font=("Segoe UI", 8)).pack(side="right", padx=4)
+                 bg="#dde1e7", font=("Segoe UI", 9)).pack(side="right", padx=4)
 
         self._progress = ttk.Progressbar(bar, mode="determinate", length=200)
         self._progress.pack(side="right", padx=8, pady=3)
@@ -693,7 +693,7 @@ class FinanceiroApp:
         for ax in self._axes.flat:
             ax.clear()
             ax.text(0.5, 0.5, "Sem dados — clique em \"Carregar da API\"",
-                    ha="center", va="center", color="#aab7b8", fontsize=9)
+                    ha="center", va="center", color="#aab7b8", fontsize=10.5)
             ax.set_facecolor("#f8f9fa")
             ax.axis("off")
         self._canvas.draw()
@@ -723,13 +723,13 @@ class FinanceiroApp:
             autopct="%1.1f%%",
             colors=pie_colors,
             startangle=90,
-            textprops={"fontsize": 8},
+            textprops={"fontsize": 9.5},
             wedgeprops={"edgecolor": "white", "linewidth": 1.5},
         )
         for at in autotexts:
-            at.set_fontsize(7.5)
+            at.set_fontsize(9)
         ax_status.set_title("Distribuição por Status",
-                             fontsize=9, fontweight="bold", pad=10)
+                             fontsize=13, fontweight="bold", pad=12)
 
         # ── Gráfico 2: barras horizontais — Top 10 Fornecedores por Saldo ─
         top10 = (
@@ -746,17 +746,18 @@ class FinanceiroApp:
             edgecolor="none",
         )
         ax_forn.set_title("Top 10 Fornecedores — Saldo",
-                           fontsize=9, fontweight="bold", pad=10)
-        ax_forn.set_xlabel("Saldo (R$)", fontsize=7)
-        ax_forn.tick_params(axis="y", labelsize=7)
-        ax_forn.tick_params(axis="x", labelsize=6)
+                           fontsize=13, fontweight="bold", pad=12)
+        ax_forn.set_xlabel("Saldo (R$)", fontsize=10.5)
+        ax_forn.tick_params(axis="y", labelsize=9.5)
+        ax_forn.tick_params(axis="x", labelsize=9)
         ax_forn.xaxis.set_major_formatter(brl_fmt)
         ax_forn.set_facecolor("#fafafa")
+        ax_forn.margins(x=0.2)
         for bar in hbars:
             w = bar.get_width()
             ax_forn.text(
                 w * 1.01, bar.get_y() + bar.get_height() / 2,
-                _brl(w), va="center", fontsize=6, color="#555",
+                _brl(w), va="center", fontsize=9, color="#555",
             )
 
         # ── Gráfico 3: barras — Saldo por Mês de Vencimento ───────────────
@@ -776,17 +777,17 @@ class FinanceiroApp:
         ax_mes.bar(range(len(by_month)), by_month.values,
                    color=bar_clrs_mes, width=0.72, edgecolor="none")
         ax_mes.set_xticks(range(len(by_month)))
-        ax_mes.set_xticklabels(labels_mes, rotation=45, ha="right", fontsize=7)
+        ax_mes.set_xticklabels(labels_mes, rotation=45, ha="right", fontsize=9.5)
         ax_mes.set_title("Saldo por Mês de Vencimento (em aberto + vencidos)",
-                         fontsize=9, fontweight="bold", pad=10)
-        ax_mes.set_ylabel("Saldo (R$)", fontsize=7)
-        ax_mes.tick_params(axis="y", labelsize=7)
+                         fontsize=13, fontweight="bold", pad=12)
+        ax_mes.set_ylabel("Saldo (R$)", fontsize=10.5)
+        ax_mes.tick_params(axis="y", labelsize=9.5)
         ax_mes.yaxis.set_major_formatter(brl_fmt)
         ax_mes.set_facecolor("#fafafa")
         ax_mes.legend(handles=[
             Patch(color="#e74c3c", label="Vencido"),
             Patch(color="#2980b9", label="A vencer"),
-        ], fontsize=7, loc="upper left", framealpha=0.7)
+        ], fontsize=9.5, loc="upper left", framealpha=0.8)
 
         # ── Gráfico 4: barras horizontais — Saldo por Tipo de Operação ────
         by_tipo = (
@@ -803,17 +804,18 @@ class FinanceiroApp:
             edgecolor="none",
         )
         ax_tipo.set_title("Saldo por Tipo de Operação",
-                          fontsize=9, fontweight="bold", pad=10)
-        ax_tipo.set_xlabel("Saldo (R$)", fontsize=7)
-        ax_tipo.tick_params(axis="y", labelsize=7)
-        ax_tipo.tick_params(axis="x", labelsize=6)
+                          fontsize=13, fontweight="bold", pad=12)
+        ax_tipo.set_xlabel("Saldo (R$)", fontsize=10.5)
+        ax_tipo.tick_params(axis="y", labelsize=9.5)
+        ax_tipo.tick_params(axis="x", labelsize=9)
         ax_tipo.xaxis.set_major_formatter(brl_fmt)
         ax_tipo.set_facecolor("#fafafa")
+        ax_tipo.margins(x=0.2)
         for bar in hbars_tipo:
             w = bar.get_width()
             ax_tipo.text(
                 w * 1.01, bar.get_y() + bar.get_height() / 2,
-                _brl(w), va="center", fontsize=6, color="#555",
+                _brl(w), va="center", fontsize=9, color="#555",
             )
 
         self._canvas.draw()
@@ -856,15 +858,16 @@ class FinanceiroApp:
         colors = [CATEGORIA_COLORS.get(c, "#7f8c8d") for c in plot_data["categoria"]]
         bars = ax.barh(plot_data["categoria"], plot_data["valor_total"],
                         color=colors, height=0.6, edgecolor="none")
-        ax.set_title("Valor Total por Categoria", fontsize=10, fontweight="bold", pad=10)
-        ax.set_xlabel("Valor (R$)", fontsize=8)
-        ax.tick_params(axis="both", labelsize=8)
+        ax.set_title("Valor Total por Categoria", fontsize=13, fontweight="bold", pad=12)
+        ax.set_xlabel("Valor (R$)", fontsize=10.5)
+        ax.tick_params(axis="both", labelsize=9.5)
         ax.xaxis.set_major_formatter(self._brl_axis_fmt)
         ax.set_facecolor("#fafafa")
+        ax.margins(x=0.2)
         for bar in bars:
             w = bar.get_width()
             ax.text(w * 1.01, bar.get_y() + bar.get_height() / 2,
-                    _brl(w), va="center", fontsize=7, color="#555")
+                    _brl(w), va="center", fontsize=9, color="#555")
         canvas.draw()
 
     def _update_filial_view(self) -> None:
@@ -897,12 +900,12 @@ class FinanceiroApp:
         pie_colors = CHART_COLORS[:len(resumo)]
         wedges, texts, autotexts = ax.pie(
             resumo["valor_total"], labels=resumo["filial"], autopct="%1.1f%%",
-            colors=pie_colors, startangle=90, textprops={"fontsize": 8},
+            colors=pie_colors, startangle=90, textprops={"fontsize": 9.5},
             wedgeprops={"edgecolor": "white", "linewidth": 1.5},
         )
         for at in autotexts:
-            at.set_fontsize(7.5)
-        ax.set_title("Valor Total por Filial", fontsize=10, fontweight="bold", pad=10)
+            at.set_fontsize(9)
+        ax.set_title("Valor Total por Filial", fontsize=13, fontweight="bold", pad=12)
         canvas.draw()
 
     def _update_evolucao_view(self) -> None:
@@ -950,15 +953,15 @@ class FinanceiroApp:
                    color=CATEGORIA_COLORS.get(categoria, "#7f8c8d"), label=categoria)
             bottom = [b + v for b, v in zip(bottom, vals)]
         ax.set_xticks(list(x))
-        ax.set_xticklabels([_fmt_mes(m) for m in meses], fontsize=7,
+        ax.set_xticklabels([_fmt_mes(m) for m in meses], fontsize=9.5,
                            rotation=45, ha="right")
         ax.set_title("Evolução dos Custos por Categoria (mês de vencimento)",
-                     fontsize=10, fontweight="bold", pad=10)
-        ax.set_ylabel("Valor (R$)", fontsize=8)
-        ax.tick_params(axis="y", labelsize=7)
+                     fontsize=13, fontweight="bold", pad=12)
+        ax.set_ylabel("Valor (R$)", fontsize=10.5)
+        ax.tick_params(axis="y", labelsize=9.5)
         ax.yaxis.set_major_formatter(self._brl_axis_fmt)
         ax.set_facecolor("#fafafa")
-        ax.legend(fontsize=6.5, loc="upper left", ncol=3, framealpha=0.7)
+        ax.legend(fontsize=9, loc="upper left", ncol=3, framealpha=0.85)
         self._canvas_evolucao.draw()
 
     # ── tabela ────────────────────────────────────────────────────────────────
