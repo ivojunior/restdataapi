@@ -115,6 +115,13 @@ def _fmt_caminhao(v, vazio: str = "—") -> str:
     return s or vazio
 
 
+def _fmt_cliente_label(codigo, nome) -> str:
+    """Código do cliente + "-" + nome do cliente (16 primeiros caracteres)."""
+    cod = str(codigo or "").strip()[:6]
+    nom = str(nome or "(sem nome)").strip()[:16]
+    return f"{cod}-{nom}"
+
+
 def _n_cargas(df: Optional[pd.DataFrame]) -> int:
     """Quantidade de cargas distintas (chave filial + codigo) em df.
 
@@ -309,9 +316,10 @@ class CargasApp:
             ("total_cargas", "Total de Cargas",   "#2c3e50"),
             ("clientes",     "Clientes",          "#7f8c8d"),
             ("peso_total",   "Peso Total (kg)",   "#1a5276"),
-            ("valor_total",  "Valor Total",       "#154360"),
-            ("valor_aberto", "Valor em Aberto",   "#ca6f1e"),
-            ("valor_medio",  "Valor Médio/Carga", "#1e8449"),
+            ("valor_total",    "Valor Total",       "#154360"),
+            ("valor_aberto",   "Valor em Aberto",   "#ca6f1e"),
+            ("valor_acertado", "Valor Acertado",    "#117864"),
+            ("valor_medio",    "Valor Médio/Carga", "#1e8449"),
         ]
 
         for i, (key, label, fg) in enumerate(cards_cfg):
@@ -355,7 +363,7 @@ class CargasApp:
     def _build_charts_tab(self, parent: ttk.Frame) -> None:
         self._fig = Figure(figsize=(13, 6.4), dpi=100, facecolor="#f0f2f5")
         self._axes = self._fig.subplots(2, 2)
-        self._fig.subplots_adjust(left=0.12, right=0.97, top=0.9,
+        self._fig.subplots_adjust(left=0.17, right=0.97, top=0.9,
                                   bottom=0.18, hspace=0.65, wspace=0.42)
         self._canvas = FigureCanvasTkAgg(self._fig, master=parent)
         self._canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=4)
@@ -550,12 +558,14 @@ class CargasApp:
 
         status_col = df["status_carga"].astype(str).str.strip()
         valor_aberto = float(df.loc[~status_col.isin(STATUS_CARGA_FECHADOS), "valor"].sum())
+        valor_acertado = valor_total - valor_aberto
 
         self._kpi_vars["total_cargas"].set(f'{n_cargas:,}'.replace(",", "."))
         self._kpi_vars["clientes"].set(f'{df["nome_cliente"].nunique():,}'.replace(",", "."))
         self._kpi_vars["peso_total"].set(_peso(df["peso"].sum()))
         self._kpi_vars["valor_total"].set(_brl(valor_total))
         self._kpi_vars["valor_aberto"].set(_brl(valor_aberto))
+        self._kpi_vars["valor_acertado"].set(_brl(valor_acertado))
         self._kpi_vars["valor_medio"].set(_brl(valor_medio))
 
     # ── gráficos ──────────────────────────────────────────────────────────────
@@ -586,22 +596,27 @@ class CargasApp:
         )
 
         # ── Gráfico 1: barras horizontais — Top 10 Clientes por Valor ─────
+        cliente_label = df.apply(
+            lambda r: _fmt_cliente_label(r.get("cliente"), r.get("nome_cliente")), axis=1)
         top_clientes = (
-            df.assign(nome_cliente=df["nome_cliente"].fillna("(sem nome)"))
-            .groupby("nome_cliente")["valor"]
+            df.assign(cliente_label=cliente_label)
+            .groupby("cliente_label")["valor"]
             .sum()
             .nlargest(10)
             .sort_values(ascending=True)
         )
         bar_colors = CHART_COLORS[:len(top_clientes)]
+        y_pos_cliente = list(range(len(top_clientes)))
         hbars = ax_top_cliente.barh(
-            top_clientes.index, top_clientes.values,
+            y_pos_cliente, top_clientes.values,
             color=bar_colors[::-1], height=0.65, edgecolor="none",
         )
-        ax_top_cliente.set_title("Top 10 Clientes — Valor de Frete",
+        ax_top_cliente.set_title("Top 10 Clientes - Valor Faturado",
                                  fontsize=13, fontweight="bold", pad=12)
         ax_top_cliente.set_xlabel("Valor (R$)", fontsize=10.5)
-        ax_top_cliente.tick_params(axis="y", labelsize=9)
+        ax_top_cliente.set_yticks(y_pos_cliente)
+        ax_top_cliente.set_yticklabels(list(top_clientes.index), ha="left")
+        ax_top_cliente.tick_params(axis="y", labelsize=9, pad=118)
         ax_top_cliente.tick_params(axis="x", labelsize=9)
         ax_top_cliente.xaxis.set_major_formatter(brl_fmt)
         ax_top_cliente.set_facecolor("#fafafa")
@@ -866,6 +881,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
 
     status_col = df["status_carga"].astype(str).str.strip()
     valor_aberto = float(df.loc[~status_col.isin(STATUS_CARGA_FECHADOS), "valor"].sum())
+    valor_acertado = valor_total - valor_aberto
 
     items_resumo = [
         ("Total de Cargas",           n_cargas,                       None),
@@ -873,6 +889,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Peso Total (kg)",           float(df["peso"].sum()),        PESO_FMT),
         ("Valor Total (R$)",          valor_total,                    BRL),
         ("Valor em Aberto (R$)",      valor_aberto,                   BRL),
+        ("Valor Acertado (R$)",       valor_acertado,                 BRL),
         ("Valor Médio por Carga (R$)", valor_medio,                   BRL),
     ]
     for i, (lbl, val, fmt) in enumerate(items_resumo, 4):
