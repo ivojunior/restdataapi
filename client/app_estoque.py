@@ -452,11 +452,12 @@ class EstoqueApp:
             return
 
         valor_total = float(df["valor_atual"].sum())
-        valor_medio = valor_total / len(df) if len(df) else 0.0
+        qtd_total = float(df["quantidade"].sum())
+        valor_medio = valor_total / qtd_total if qtd_total else 0.0
 
         self._kpi_vars["total_itens"].set(f'{len(df):,}'.replace(",", "."))
         self._kpi_vars["filiais"].set(f'{df["filial"].nunique():,}'.replace(",", "."))
-        self._kpi_vars["qtd_total"].set(_qtd(df["quantidade"].sum()))
+        self._kpi_vars["qtd_total"].set(_qtd(qtd_total))
         self._kpi_vars["valor_total"].set(_brl(valor_total))
         self._kpi_vars["valor_medio"].set(_brl(valor_medio))
 
@@ -748,12 +749,13 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         italic=True, size=9, color="7F8C8D", name="Calibri")
 
     valor_total = float(df["valor_atual"].sum())
-    valor_medio = valor_total / len(df) if len(df) else 0.0
+    qtd_total = float(df["quantidade"].sum())
+    valor_medio = valor_total / qtd_total if qtd_total else 0.0
 
     items_resumo = [
         ("Total de Itens",           len(df),                        None),
         ("Filiais Distintas",        int(df["filial"].nunique()),    None),
-        ("Quantidade Total",         float(df["quantidade"].sum()),  QTD_FMT),
+        ("Quantidade Total",         qtd_total,                      QTD_FMT),
         ("Valor Total (R$)",         valor_total,                    BRL),
         ("Valor Médio por Item (R$)", valor_medio,                   BRL),
     ]
