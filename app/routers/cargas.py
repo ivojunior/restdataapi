@@ -31,13 +31,20 @@ class StatusCarga(str, enum.Enum):
     """Valores de DAK_ACECAR confirmados pelo usuário para esta customização
     (o campo não tem lista pública de opções — veja app/models/veiculo_carga.py)."""
 
-    faturada = "1"
-    conf_cega = "2"
-    prestacao_titulos = "3"
-    fechada = "7"
+    montada = "1"
+    disp_conf_gega = "2"
+    disp_prest_contas = "3"
+    disp_prest_titulos = "6"
+    encerrada = "7"
+    juros_pendentes = "8"
 
 
-def _query_cargas(db: Session, data_inicial: str, status: Optional[StatusCarga] = None):
+def _query_cargas(
+    db: Session,
+    data_inicial: str,
+    data_final: Optional[str] = None,
+    status: Optional[StatusCarga] = None,
+):
     # select_cargas.sql busca o valor da carga com uma subconsulta correlacionada
     # em SE1070 (nota fiscal), casando filial/série/número/cliente/loja — não é
     # DAK_VALOR. ISNULL(...,0) na query original == coalesce(...,0) aqui.
@@ -86,6 +93,8 @@ def _query_cargas(db: Session, data_inicial: str, status: Optional[StatusCarga] 
             ItemCarga.data >= data_inicial,
         )
     )
+    if data_final:
+        query = query.filter(ItemCarga.data <= data_final)
     if status:
         query = query.filter(VeiculoCarga.status == status.value)
     return query
@@ -100,16 +109,22 @@ def listar_cargas(
         description="Data mínima da carga, formato AAAAMMDD (DAI_DATA >= data_inicial). "
         "Sem o parâmetro, assume a data atual do sistema.",
     ),
+    data_final: Optional[str] = Query(
+        None,
+        description="Data máxima da carga, formato AAAAMMDD (DAI_DATA <= data_final). "
+        "Sem o parâmetro, não há limite superior.",
+    ),
     status: Optional[StatusCarga] = Query(
         None,
-        description="Filtra pelo status da carga (DAK_ACECAR): 1=Faturada, "
-        "2=Conf. Cega, 3=Prestação de Títulos, 7=Fechada. Sem o parâmetro, "
-        "traz cargas de qualquer status.",
+        description="Filtra pelo status da carga (DAK_ACECAR): 1=Montada, "
+        "2=Disp Conf Gega, 3=Disp Prest Contas, 6=Disp Prest Títulos, "
+        "7=Encerrada, 8=Juros Pendentes. Sem o parâmetro, traz cargas de "
+        "qualquer status.",
     ),
     db: Session = Depends(get_db),
 ):
     data_filtro = data_inicial or date.today().strftime("%Y%m%d")
-    query = _query_cargas(db, data_filtro, status)
+    query = _query_cargas(db, data_filtro, data_final, status)
     total = query.count()
     # order_by aplicado apenas aqui (após o count()): o MSSQL exige ORDER BY
     # junto de OFFSET/LIMIT, mas não aceita ORDER BY dentro da subquery que o

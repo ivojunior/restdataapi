@@ -142,6 +142,33 @@ def test_filtro_status_invalido_retorna_422(client, auth_headers):
     assert resposta.status_code == 422
 
 
+def test_filtro_status_aceita_todos_os_codigos_confirmados(client, auth_headers, db_session):
+    # DAK_ACECAR: 1=Montada, 2=Disp Conf Gega, 3=Disp Prest Contas,
+    # 6=Disp Prest Títulos, 7=Encerrada, 8=Juros Pendentes.
+    for codigo_status in ("1", "2", "3", "6", "7", "8"):
+        resposta = client.get(f"/cargas/?status={codigo_status}", headers=auth_headers)
+        assert resposta.status_code == 200, codigo_status
+
+
+def test_filtro_data_final_via_query_string(client, auth_headers, db_session):
+    db_session.add_all(
+        [
+            _cliente(),
+            _veiculo(codigo="000001", sequencia_carga="001"),
+            _item(codigo="000001", sequencia_carga="001", data="20260805"),
+            _veiculo(codigo="000002", sequencia_carga="001"),
+            _item(codigo="000002", sequencia_carga="001", data="20260815"),
+        ]
+    )
+    db_session.commit()
+
+    resposta = client.get(
+        "/cargas/?data_inicial=20260801&data_final=20260810", headers=auth_headers)
+    dados = resposta.json()
+    assert dados["total"] == 1
+    assert dados["items"][0]["codigo"] == "000001"
+
+
 def test_item_sem_veiculo_correspondente_e_ignorado(client, auth_headers, db_session):
     db_session.add_all([_cliente(), _item()])
     db_session.commit()

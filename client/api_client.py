@@ -87,11 +87,14 @@ class APIClient:
         skip: int = 0,
         limit: int = 200,
         data_inicial: Optional[str] = None,
+        data_final: Optional[str] = None,
         status: Optional[str] = None,
     ) -> Dict:
         params: Dict[str, Any] = {"skip": skip, "limit": limit}
         if data_inicial:
             params["data_inicial"] = data_inicial
+        if data_final:
+            params["data_final"] = data_final
         if status:
             params["status"] = status
         return self._get("/cargas/", params)
@@ -99,18 +102,20 @@ class APIClient:
     def get_all_cargas(
         self,
         data_inicial: Optional[str] = None,
+        data_final: Optional[str] = None,
         status: Optional[str] = None,
         progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Tuple[List[Dict], int]:
         """Busca todas as páginas do relatório de cargas.
 
         O endpoint /cargas aplica sempre como regra fixa apenas itens não
-        excluídos e não cancelados; a data mínima (data_inicial) é
-        parametrizável — é o cliente quem decide a partir de qual data
-        consultar. Sem o parâmetro, a API traz cargas de qualquer data.
-        `status` ("1", "2", "3" ou "7") filtra pelo status da carga
-        (DAK_ACECAR). Qualquer outro filtro (filial, cliente, caminhão etc.)
-        é aplicado no cliente, após o carregamento completo dos dados.
+        excluídos e não cancelados; o período (data_inicial/data_final) é
+        parametrizável — é o cliente quem decide o intervalo de datas a
+        consultar. Sem data_inicial, a API assume a data atual do sistema;
+        sem data_final, não há limite superior. `status` ("1", "2", "3",
+        "6", "7" ou "8") filtra pelo status da carga (DAK_ACECAR). Qualquer
+        outro filtro (filial, cliente, caminhão etc.) é aplicado no
+        cliente, após o carregamento completo dos dados.
         """
         all_items: List[Dict] = []
         skip = 0
@@ -118,7 +123,8 @@ class APIClient:
 
         while True:
             result = self.get_cargas_page(
-                skip=skip, limit=limit, data_inicial=data_inicial, status=status)
+                skip=skip, limit=limit, data_inicial=data_inicial,
+                data_final=data_final, status=status)
             items = result["items"]
             total = result["total"]
             all_items.extend(items)

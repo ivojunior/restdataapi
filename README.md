@@ -124,7 +124,7 @@ Todos os endpoints são `GET` — não existem rotas `POST`, `PUT` ou `DELETE`.
 | GET    | `/produtos/{rec_no}`               | Obtém um produto pelo `R_E_C_N_O_` |
 | GET    | `/financeiro/`                     | Relatório financeiro (réplica de `select_financeiro.sql`): títulos a pagar (SE2070) com fornecedor (SA2070) e descrição do tipo de operação (PA6000); filtra por `vencimento_de`/`vencimento_ate` |
 | GET    | `/saldos-estoque/`                 | Relatório de saldo de estoque (baseado em `select_estoque_produtos.sql`): saldos (SB2070) com descrição e fator de conversão do produto (SB1000); filtra por `tipo_produto`/`local` |
-| GET    | `/cargas/`                         | Relatório de cargas (baseado em `select_cargas.sql`): itens de carga (DAI070) com veículo (DAK070), nome do cliente (SA1070) e valor da nota fiscal (SE1070); filtra por `data_inicial`/`status` |
+| GET    | `/cargas/`                         | Relatório de cargas (baseado em `select_cargas.sql`): itens de carga (DAI070) com veículo (DAK070), nome do cliente (SA1070) e valor da nota fiscal (SE1070); filtra por `data_inicial`/`data_final`/`status` |
 
 Parâmetros comuns de listagem: `skip`, `limit` (paginação), `order_by` (ex.: `nome` ou `-criado_em` para ordem decrescente) e filtros por campo (ex.: `?filial=01`).
 
@@ -167,7 +167,8 @@ Baseado no `SELECT` de `select_cargas.sql`: junta `DAI070` (item de carga) com `
 Diferente da consulta original — que fixa a data mínima em `'20260801'` e o status em `:STATUS` — aqui os dois **não são fixos**: são parametrizáveis via query string.
 
 - `data_inicial` (opcional): filtra pela data do item (`DAI_DATA`, formato `AAAAMMDD`), trazendo apenas cargas com `data >= data_inicial`. Sem o parâmetro, assume a data atual do sistema (equivalente a `data_inicial=<hoje>`).
-- `status` (opcional): filtra pelo status da carga (`DAK_ACECAR`) — `1` (Faturada), `2` (Conf. Cega), `3` (Prestação de Títulos) ou `7` (Fechada). Sem o parâmetro, traz cargas de qualquer status. `DAK_ACECAR` é uma customização desta instalação do Protheus (no dicionário padrão é "Acerto de Carga Ok?", campo `C(1)` sem lista pública de valores) — esses quatro códigos foram confirmados pelo usuário, não por documentação oficial.
+- `data_final` (opcional): filtra pela data do item (`DAI_DATA`, formato `AAAAMMDD`), trazendo apenas cargas com `data <= data_final`. Sem o parâmetro, não há limite superior.
+- `status` (opcional): filtra pelo status da carga (`DAK_ACECAR`) — `1` (Montada), `2` (Disp Conf Gega), `3` (Disp Prest Contas), `6` (Disp Prest Títulos), `7` (Encerrada) ou `8` (Juros Pendentes). Sem o parâmetro, traz cargas de qualquer status. `DAK_ACECAR` é uma customização desta instalação do Protheus (no dicionário padrão é "Acerto de Carga Ok?", campo `C(1)` sem lista pública de valores) — esses seis códigos foram confirmados pelo usuário, não por documentação oficial.
 
 Suporta apenas paginação (`skip`, `limit`) e os filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
 
@@ -181,7 +182,7 @@ Além da API, o diretório `client/` traz aplicações desktop (Tkinter) que con
 |-----------------------------|---------------------|------------|
 | `client/app_financeiro.py`  | `/financeiro/`      | `vencimento_de`/`vencimento_ate`/`status` já vão para a API (período inicia na data atual, mesmo padrão da API); demais filtros são aplicados no cliente. |
 | `client/app_estoque.py`     | `/saldos-estoque/`  | `tipo_produto`/`local` resolvidos por um seletor de "Tipo de Estoque". |
-| `client/app_cargas.py`      | `/cargas/`          | `data_inicial`/`status` já vão para a API (o seletor de data desta tela já inicia na data de hoje, igual ao padrão da API); demais filtros são aplicados no cliente. |
+| `client/app_cargas.py`      | `/cargas/`          | `data_inicial`/`data_final`/`status` já vão para a API (os dois seletores de data — "Data mínima de"/"Data mínima até" — já iniciam na data de hoje, igual ao padrão da API); demais filtros são aplicados no cliente. Placa `KHA0902` é exibida como "Cliente" (retirada pelo próprio cliente, sem caminhão terceirizado). |
 
 Para rodar:
 

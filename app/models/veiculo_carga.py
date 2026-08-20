@@ -22,7 +22,8 @@ class VeiculoCarga(Base):
     caminhao = Column("DAK_CAMINH", String(10))
     # Apesar do nome (dicionário padrão do Protheus: "Acerto de Carga Ok?"),
     # nesta instalação DAK_ACECAR foi customizado para guardar o status da
-    # carga ("1"=Faturada, "2"=Conf. Cega, "3"=Prestação de Títulos,
-    # "7"=Fechada — confirmado pelo usuário; não há lista pública desses
-    # valores para esse campo, que é específico desta customização).
+    # carga ("1"=Montada, "2"=Disp Conf Gega, "3"=Disp Prest Contas,
+    # "6"=Disp Prest Títulos, "7"=Encerrada, "8"=Juros Pendentes —
+    # confirmado pelo usuário; não há lista pública desses valores para
+    # esse campo, que é específico desta customização).
     status = Column("DAK_ACECAR", String(1))

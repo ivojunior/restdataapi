@@ -47,13 +47,19 @@ CHART_COLORS = [
 # (campo DAK_ACECAR — customização desta instalação do Protheus, sem lista
 # pública de valores; confirmados pelo usuário).
 STATUS_CARGA: Dict[str, str] = {
-    "Faturada":           "1",
-    "Conf Cega":          "2",
-    "Prestação Títulos":  "3",
-    "Fechada":            "7",
+    "Montada":           "1",
+    "Disp Conf Gega":    "2",
+    "Disp Prest Contas": "3",
+    "Disp Prest Títulos":"6",
+    "Encerrada":         "7",
+    "Juros Pendentes":   "8",
 }
 STATUS_CARGA_LABELS: Dict[str, str] = {v: k for k, v in STATUS_CARGA.items()}
 STATUS_FILTRO_PADRAO = "(Todos)"
+
+# Status considerados "fechados" para o card "Valor em Aberto": tudo que não
+# for Encerrada (7) ou Juros Pendentes (8) ainda está em aberto.
+STATUS_CARGA_FECHADOS = {"7", "8"}
 
 TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
     ("filial",        "Filial",      55,  "c"),
@@ -95,6 +101,18 @@ def _fmt_date(s) -> str:
 def _fmt_status(v) -> str:
     s = str(v or "").strip()
     return STATUS_CARGA_LABELS.get(s, s or "—")
+
+
+# Placa usada para indicar que o próprio cliente retirou a carga (sem
+# caminhão terceirizado vinculado) — exibida como "Cliente" em vez da placa.
+CAMINHAO_CLIENTE = "KHA0902"
+
+
+def _fmt_caminhao(v, vazio: str = "—") -> str:
+    s = str(v or "").strip()
+    if s == CAMINHAO_CLIENTE:
+        return "Cliente"
+    return s or vazio
 
 
 def _n_cargas(df: Optional[pd.DataFrame]) -> int:
@@ -202,12 +220,12 @@ class CargasApp:
     def _build_periodo_frame(self) -> None:
         f = ttk.LabelFrame(
             self.root,
-            text="Período e status (define data_inicial/status enviados à API — recarrega ao consultar)",
+            text="Período e status (define data_inicial/data_final/status enviados à API — recarrega ao consultar)",
             padding=(10, 6),
         )
         f.pack(fill="x", padx=12, pady=3)
 
-        ttk.Label(f, text="Data mínima da carga:").grid(
+        ttk.Label(f, text="Data mínima de:").grid(
             row=0, column=0, sticky="w", padx=(0, 6))
 
         self._data_inicial_var = tk.StringVar()
@@ -219,18 +237,30 @@ class CargasApp:
         self._de_data_inicial.set_date(date.today())
         self._de_data_inicial.grid(row=0, column=1, sticky="w")
 
-        ttk.Label(f, text="Status:").grid(row=0, column=2, sticky="w", padx=(14, 3))
+        ttk.Label(f, text="Data mínima até:").grid(
+            row=0, column=2, sticky="w", padx=(14, 6))
+
+        self._data_final_var = tk.StringVar()
+        self._de_data_final = DateEntry(
+            f, textvariable=self._data_final_var, width=12,
+            date_pattern="dd/mm/yyyy",
+            background="#1a5276", foreground="white", borderwidth=1,
+        )
+        self._de_data_final.set_date(date.today())
+        self._de_data_final.grid(row=0, column=3, sticky="w")
+
+        ttk.Label(f, text="Status:").grid(row=0, column=4, sticky="w", padx=(14, 3))
         self._f_status = tk.StringVar(value=STATUS_FILTRO_PADRAO)
         ttk.Combobox(
             f, textvariable=self._f_status, width=16, state="readonly",
             values=[STATUS_FILTRO_PADRAO, *STATUS_CARGA.keys()],
-        ).grid(row=0, column=3, sticky="w")
+        ).grid(row=0, column=5, sticky="w")
 
         ttk.Label(
             f,
-            text="(período já inicia na data de hoje, igual ao padrão da API; altere para consultar outro)",
+            text="(por padrão, o período já inicia e termina hoje; amplie as datas para consultar outro período)",
             foreground="#7f8c8d",
-        ).grid(row=0, column=4, sticky="w", padx=(10, 0))
+        ).grid(row=0, column=6, sticky="w", padx=(10, 0))
 
     # ── filtros (aplicados no cliente, após o carregamento) ────────────────────
 
@@ -280,6 +310,7 @@ class CargasApp:
             ("clientes",     "Clientes",          "#7f8c8d"),
             ("peso_total",   "Peso Total (kg)",   "#1a5276"),
             ("valor_total",  "Valor Total",       "#154360"),
+            ("valor_aberto", "Valor em Aberto",   "#ca6f1e"),
             ("valor_medio",  "Valor Médio/Carga", "#1e8449"),
         ]
 
@@ -393,27 +424,37 @@ class CargasApp:
     def consultar(self) -> None:
         if self._loading:
             return
-        self._loading = True
-        self._clear_data()
 
         # DateEntry sempre contém uma data válida; converte DD/MM/AAAA -> AAAAMMDD.
         data_inicial = self._de_data_inicial.get_date().strftime("%Y%m%d")
+        data_final = self._de_data_final.get_date().strftime("%Y%m%d")
+        if data_final < data_inicial:
+            messagebox.showwarning(
+                "Período inválido",
+                '"Data mínima até" não pode ser anterior a "Data mínima de".',
+            )
+            return
+
+        self._loading = True
+        self._clear_data()
+
         status_label = self._f_status.get()
         status = STATUS_CARGA.get(status_label)
 
-        periodo = f"a partir de {self._data_inicial_var.get()}"
+        periodo = f"de {self._data_inicial_var.get()} até {self._data_final_var.get()}"
         if status:
             periodo += f", status={status_label}"
         self._set_status(f"Consultando /cargas na API… [{periodo}]", indeterminate=True)
         threading.Thread(
-            target=self._fetch_thread, args=(data_inicial, status), daemon=True
+            target=self._fetch_thread, args=(data_inicial, data_final, status), daemon=True
         ).start()
 
-    def _fetch_thread(self, data_inicial: str, status: Optional[str]) -> None:
+    def _fetch_thread(self, data_inicial: str, data_final: str, status: Optional[str]) -> None:
         try:
             client = self._make_client()
             items, total = client.get_all_cargas(
-                data_inicial=data_inicial, status=status, progress_callback=self._on_progress)
+                data_inicial=data_inicial, data_final=data_final, status=status,
+                progress_callback=self._on_progress)
             self.root.after(0, self._on_data_ready, items, total)
         except Exception as exc:
             self.root.after(0, self._on_error, str(exc))
@@ -489,7 +530,8 @@ class CargasApp:
 
         caminhao = self._f_caminhao.get().strip().lower()
         if caminhao:
-            df = df[df["caminhao"].fillna("").str.lower().str.contains(caminhao)]
+            labels = df["caminhao"].apply(_fmt_caminhao).str.lower()
+            df = df[labels.str.contains(caminhao)]
 
         return df
 
@@ -506,10 +548,14 @@ class CargasApp:
         n_cargas = df["_carga_key"].nunique()
         valor_medio = valor_total / n_cargas if n_cargas else 0.0
 
+        status_col = df["status_carga"].astype(str).str.strip()
+        valor_aberto = float(df.loc[~status_col.isin(STATUS_CARGA_FECHADOS), "valor"].sum())
+
         self._kpi_vars["total_cargas"].set(f'{n_cargas:,}'.replace(",", "."))
         self._kpi_vars["clientes"].set(f'{df["nome_cliente"].nunique():,}'.replace(",", "."))
         self._kpi_vars["peso_total"].set(_peso(df["peso"].sum()))
         self._kpi_vars["valor_total"].set(_brl(valor_total))
+        self._kpi_vars["valor_aberto"].set(_brl(valor_aberto))
         self._kpi_vars["valor_medio"].set(_brl(valor_medio))
 
     # ── gráficos ──────────────────────────────────────────────────────────────
@@ -600,7 +646,7 @@ class CargasApp:
 
         # ── Gráfico 4: barras horizontais — Top 10 Caminhões por Peso ─────
         top_caminhoes = (
-            df.assign(caminhao=df["caminhao"].fillna("(não informado)"))
+            df.assign(caminhao=df["caminhao"].apply(lambda v: _fmt_caminhao(v, "(não informado)")))
             .groupby("caminhao")["peso"]
             .sum()
             .nlargest(10)
@@ -645,7 +691,7 @@ class CargasApp:
                 row.get("pedido", ""),
                 row.get("nome_cliente", ""),
                 row.get("nota_fiscal", ""),
-                row.get("caminhao", ""),
+                _fmt_caminhao(row.get("caminhao", "")),
                 _fmt_status(row.get("status_carga", "")),
                 _peso(row.get("peso", 0)),
                 _brl(row.get("valor", 0)),
@@ -789,6 +835,8 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
                 val = _fmt_date(val)
             elif field == "status_carga":
                 val = _fmt_status(val)
+            elif field == "caminhao":
+                val = _fmt_caminhao(val)
             cell = ws1.cell(row=ri, column=ci, value=val)
             cell.border = BORDER
             if field == "valor":
@@ -816,11 +864,15 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     n_cargas = int(df["_carga_key"].nunique())
     valor_medio = valor_total / n_cargas if n_cargas else 0.0
 
+    status_col = df["status_carga"].astype(str).str.strip()
+    valor_aberto = float(df.loc[~status_col.isin(STATUS_CARGA_FECHADOS), "valor"].sum())
+
     items_resumo = [
         ("Total de Cargas",           n_cargas,                       None),
         ("Clientes Distintos",        int(df["nome_cliente"].nunique()), None),
         ("Peso Total (kg)",           float(df["peso"].sum()),        PESO_FMT),
         ("Valor Total (R$)",          valor_total,                    BRL),
+        ("Valor em Aberto (R$)",      valor_aberto,                   BRL),
         ("Valor Médio por Carga (R$)", valor_medio,                   BRL),
     ]
     for i, (lbl, val, fmt) in enumerate(items_resumo, 4):
