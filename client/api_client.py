@@ -87,15 +87,19 @@ class APIClient:
         skip: int = 0,
         limit: int = 200,
         data_inicial: Optional[str] = None,
+        status: Optional[str] = None,
     ) -> Dict:
         params: Dict[str, Any] = {"skip": skip, "limit": limit}
         if data_inicial:
             params["data_inicial"] = data_inicial
+        if status:
+            params["status"] = status
         return self._get("/cargas/", params)
 
     def get_all_cargas(
         self,
         data_inicial: Optional[str] = None,
+        status: Optional[str] = None,
         progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Tuple[List[Dict], int]:
         """Busca todas as páginas do relatório de cargas.
@@ -104,15 +108,17 @@ class APIClient:
         excluídos e não cancelados; a data mínima (data_inicial) é
         parametrizável — é o cliente quem decide a partir de qual data
         consultar. Sem o parâmetro, a API traz cargas de qualquer data.
-        Qualquer outro filtro (filial, cliente, caminhão etc.) é aplicado no
-        cliente, após o carregamento completo dos dados.
+        `status` ("1", "2", "3" ou "7") filtra pelo status da carga
+        (DAK_ACECAR). Qualquer outro filtro (filial, cliente, caminhão etc.)
+        é aplicado no cliente, após o carregamento completo dos dados.
         """
         all_items: List[Dict] = []
         skip = 0
         limit = 200
 
         while True:
-            result = self.get_cargas_page(skip=skip, limit=limit, data_inicial=data_inicial)
+            result = self.get_cargas_page(
+                skip=skip, limit=limit, data_inicial=data_inicial, status=status)
             items = result["items"]
             total = result["total"]
             all_items.extend(items)

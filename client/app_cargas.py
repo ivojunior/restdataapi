@@ -5,12 +5,13 @@ Exibe filtro de data mínima (enviado à API), filtros locais, KPIs, gráficos
 analíticos e exporta tudo para Excel.
 
 O endpoint /cargas aplica sempre como regra fixa apenas itens não excluídos
-e não cancelados. A data mínima da carga (data_inicial) é o único filtro
-parametrizável via query string — o seletor de data desta tela já inicia na
-data atual do sistema (mesmo padrão que a API assume quando o parâmetro não
-é enviado) e o usuário pode alterá-lo para consultar outro período antes de
-carregar. Os demais filtros (filial, cliente, caminhão) são aplicados no
-cliente, após o carregamento completo dos dados.
+e não cancelados. A data mínima da carga (data_inicial) e o status da carga
+(status, campo DAK_ACECAR) são enviados à API como query string — o seletor
+de data desta tela já inicia na data atual do sistema (mesmo padrão que a
+API assume quando o parâmetro não é enviado) e o usuário pode alterá-lo para
+consultar outro período antes de carregar. Os demais filtros (filial,
+cliente, caminhão) são aplicados no cliente, após o carregamento completo
+dos dados.
 
 Requisitos:  pip install requests matplotlib pandas openpyxl python-dotenv tkcalendar
 """
@@ -42,26 +43,29 @@ CHART_COLORS = [
     "#16a085", "#d35400", "#2c3e50", "#c0392b", "#1abc9c",
 ]
 
-# O campo "carreta" (DAK_ACECAR, vindo como "carreta" na resposta da API)
-# carrega um código de status da carga, não uma placa — mapa de exibição.
+# Rótulo exibido -> valor do parâmetro "status" aceito pelo endpoint /cargas
+# (campo DAK_ACECAR — customização desta instalação do Protheus, sem lista
+# pública de valores; confirmados pelo usuário).
 STATUS_CARGA: Dict[str, str] = {
-    "1": "Faturada",
-    "2": "Conf Cega",
-    "7": "Fechada",
-    "3": "Prestação Títulos",
+    "Faturada":           "1",
+    "Conf Cega":          "2",
+    "Prestação Títulos":  "3",
+    "Fechada":            "7",
 }
+STATUS_CARGA_LABELS: Dict[str, str] = {v: k for k, v in STATUS_CARGA.items()}
+STATUS_FILTRO_PADRAO = "(Todos)"
 
 TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
-    ("filial",       "Filial",      55,  "c"),
-    ("codigo",       "Carga",       75,  "c"),
-    ("data",         "Data",        85,  "c"),
-    ("pedido",       "Pedido",      80,  "c"),
-    ("nome_cliente", "Cliente",    220,  "w"),
-    ("nota_fiscal",  "Nota Fiscal", 90,  "c"),
-    ("caminhao",     "Caminhão",    90,  "c"),
-    ("carreta",      "Status",     130,  "c"),
-    ("peso",         "Peso (kg)",  110,  "e"),
-    ("valor",        "Valor (R$)", 120,  "e"),
+    ("filial",        "Filial",      55,  "c"),
+    ("codigo",        "Carga",       75,  "c"),
+    ("data",          "Data",        85,  "c"),
+    ("pedido",        "Pedido",      80,  "c"),
+    ("nome_cliente",  "Cliente",    220,  "w"),
+    ("nota_fiscal",   "Nota Fiscal", 90,  "c"),
+    ("caminhao",      "Caminhão",    90,  "c"),
+    ("status_carga",  "Status",     130,  "c"),
+    ("peso",          "Peso (kg)",  110,  "e"),
+    ("valor",         "Valor (R$)", 120,  "e"),
 ]
 
 
@@ -90,7 +94,18 @@ def _fmt_date(s) -> str:
 
 def _fmt_status(v) -> str:
     s = str(v or "").strip()
-    return STATUS_CARGA.get(s, s or "—")
+    return STATUS_CARGA_LABELS.get(s, s or "—")
+
+
+def _n_cargas(df: Optional[pd.DataFrame]) -> int:
+    """Quantidade de cargas distintas (chave filial + codigo) em df.
+
+    Cada linha retornada por /cargas é um ITEM de uma carga (uma carga pode
+    ter vários pedidos e vários itens); não é uma carga por si só.
+    """
+    if df is None or df.empty:
+        return 0
+    return int(df["_carga_key"].nunique())
 
 
 # ── aplicação principal ───────────────────────────────────────────────────────
@@ -187,7 +202,7 @@ class CargasApp:
     def _build_periodo_frame(self) -> None:
         f = ttk.LabelFrame(
             self.root,
-            text="Período (define o filtro data_inicial enviado à API — recarrega ao consultar)",
+            text="Período e status (define data_inicial/status enviados à API — recarrega ao consultar)",
             padding=(10, 6),
         )
         f.pack(fill="x", padx=12, pady=3)
@@ -204,11 +219,18 @@ class CargasApp:
         self._de_data_inicial.set_date(date.today())
         self._de_data_inicial.grid(row=0, column=1, sticky="w")
 
+        ttk.Label(f, text="Status:").grid(row=0, column=2, sticky="w", padx=(14, 3))
+        self._f_status = tk.StringVar(value=STATUS_FILTRO_PADRAO)
+        ttk.Combobox(
+            f, textvariable=self._f_status, width=16, state="readonly",
+            values=[STATUS_FILTRO_PADRAO, *STATUS_CARGA.keys()],
+        ).grid(row=0, column=3, sticky="w")
+
         ttk.Label(
             f,
-            text="(já inicia na data de hoje, igual ao padrão da API; altere para consultar outro período)",
+            text="(período já inicia na data de hoje, igual ao padrão da API; altere para consultar outro)",
             foreground="#7f8c8d",
-        ).grid(row=0, column=2, sticky="w", padx=(10, 0))
+        ).grid(row=0, column=4, sticky="w", padx=(10, 0))
 
     # ── filtros (aplicados no cliente, após o carregamento) ────────────────────
 
@@ -376,18 +398,22 @@ class CargasApp:
 
         # DateEntry sempre contém uma data válida; converte DD/MM/AAAA -> AAAAMMDD.
         data_inicial = self._de_data_inicial.get_date().strftime("%Y%m%d")
+        status_label = self._f_status.get()
+        status = STATUS_CARGA.get(status_label)
 
-        self._set_status(
-            f"Consultando /cargas na API… [a partir de {self._data_inicial_var.get()}]",
-            indeterminate=True,
-        )
-        threading.Thread(target=self._fetch_thread, args=(data_inicial,), daemon=True).start()
+        periodo = f"a partir de {self._data_inicial_var.get()}"
+        if status:
+            periodo += f", status={status_label}"
+        self._set_status(f"Consultando /cargas na API… [{periodo}]", indeterminate=True)
+        threading.Thread(
+            target=self._fetch_thread, args=(data_inicial, status), daemon=True
+        ).start()
 
-    def _fetch_thread(self, data_inicial: str) -> None:
+    def _fetch_thread(self, data_inicial: str, status: Optional[str]) -> None:
         try:
             client = self._make_client()
             items, total = client.get_all_cargas(
-                data_inicial=data_inicial, progress_callback=self._on_progress)
+                data_inicial=data_inicial, status=status, progress_callback=self._on_progress)
             self.root.after(0, self._on_data_ready, items, total)
         except Exception as exc:
             self.root.after(0, self._on_error, str(exc))
@@ -409,14 +435,16 @@ class CargasApp:
         if not df.empty:
             df["peso"] = pd.to_numeric(df["peso"], errors="coerce").fillna(0.0)
             df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0.0)
+            # Uma carga é identificada por filial + codigo (DAI_FILIAL + DAI_COD);
+            # cada linha da API é um item dessa carga, não uma carga distinta.
+            df["_carga_key"] = df["filial"].astype(str) + "-" + df["codigo"].astype(str)
 
         self._df_raw = df
         self._apply_filters_and_refresh()
 
-        n = len(self._df) if self._df is not None else 0
+        n = _n_cargas(self._df)
         self._set_status(
-            f"{n} carga(s) exibida(s)"
-            + (f"  [total carregado da API: {total_api}]" if n != total_api else "")
+            f"{n} carga(s) distinta(s) exibida(s)  [{total_api} item(ns) carregado(s) da API]"
         )
         self._progress["value"] = 100
         self._pct_var.set("100%")
@@ -437,7 +465,7 @@ class CargasApp:
                 "Filtros", "Carregue os dados da API antes de aplicar filtros.")
             return
         self._apply_filters_and_refresh()
-        n = len(self._df) if self._df is not None else 0
+        n = _n_cargas(self._df)
         self._set_status(f"{n} carga(s) exibida(s) após filtros")
 
     def _apply_filters_and_refresh(self) -> None:
@@ -475,9 +503,10 @@ class CargasApp:
             return
 
         valor_total = float(df["valor"].sum())
-        valor_medio = valor_total / len(df) if len(df) else 0.0
+        n_cargas = df["_carga_key"].nunique()
+        valor_medio = valor_total / n_cargas if n_cargas else 0.0
 
-        self._kpi_vars["total_cargas"].set(f'{len(df):,}'.replace(",", "."))
+        self._kpi_vars["total_cargas"].set(f'{n_cargas:,}'.replace(",", "."))
         self._kpi_vars["clientes"].set(f'{df["nome_cliente"].nunique():,}'.replace(",", "."))
         self._kpi_vars["peso_total"].set(_peso(df["peso"].sum()))
         self._kpi_vars["valor_total"].set(_brl(valor_total))
@@ -556,7 +585,8 @@ class CargasApp:
                                   fontsize=13, fontweight="bold", pad=12)
 
         # ── Gráfico 3: barras — Nº de Cargas por Data ──────────────────────
-        by_data = df.groupby("data").size().sort_index().tail(12)
+        # Conta cargas distintas (filial + codigo) por data, não linhas/itens.
+        by_data = df.groupby("data")["_carga_key"].nunique().sort_index().tail(12)
         labels_data = [_fmt_date(d) for d in by_data.index]
         ax_evolucao.bar(range(len(by_data)), by_data.values,
                         color="#2980b9", width=0.7, edgecolor="none")
@@ -616,7 +646,7 @@ class CargasApp:
                 row.get("nome_cliente", ""),
                 row.get("nota_fiscal", ""),
                 row.get("caminhao", ""),
-                _fmt_status(row.get("carreta", "")),
+                _fmt_status(row.get("status_carga", "")),
                 _peso(row.get("peso", 0)),
                 _brl(row.get("valor", 0)),
             ))
@@ -741,7 +771,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Cliente",       "nome_cliente", 34),
         ("Nota Fiscal",   "nota_fiscal",  14),
         ("Caminhão",      "caminhao",     14),
-        ("Status",        "carreta",      18),
+        ("Status",        "status_carga", 18),
         ("Peso (kg)",     "peso",         14),
         ("Valor (R$)",    "valor",        16),
     ]
@@ -757,7 +787,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
             val = row.get(field)
             if field == "data":
                 val = _fmt_date(val)
-            elif field == "carreta":
+            elif field == "status_carga":
                 val = _fmt_status(val)
             cell = ws1.cell(row=ri, column=ci, value=val)
             cell.border = BORDER
@@ -783,10 +813,11 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         italic=True, size=9, color="7F8C8D", name="Calibri")
 
     valor_total = float(df["valor"].sum())
-    valor_medio = valor_total / len(df) if len(df) else 0.0
+    n_cargas = int(df["_carga_key"].nunique())
+    valor_medio = valor_total / n_cargas if n_cargas else 0.0
 
     items_resumo = [
-        ("Total de Cargas",           len(df),                        None),
+        ("Total de Cargas",           n_cargas,                       None),
         ("Clientes Distintos",        int(df["nome_cliente"].nunique()), None),
         ("Peso Total (kg)",           float(df["peso"].sum()),        PESO_FMT),
         ("Valor Total (R$)",          valor_total,                    BRL),
@@ -804,7 +835,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     ws3 = wb.create_sheet("Por Filial")
     by_filial = (
         df.groupby("filial", as_index=False)
-        .agg(qtd_cargas=("codigo", "count"),
+        .agg(qtd_cargas=("_carga_key", "nunique"),
              peso_total=("peso", "sum"),
              valor_total=("valor", "sum"))
         .sort_values("valor_total", ascending=False)
@@ -841,7 +872,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     by_cliente = (
         df.assign(nome_cliente=df["nome_cliente"].fillna("(sem nome)"))
         .groupby("nome_cliente", as_index=False)
-        .agg(qtd_cargas=("codigo", "count"),
+        .agg(qtd_cargas=("_carga_key", "nunique"),
              peso_total=("peso", "sum"),
              valor_total=("valor", "sum"))
         .sort_values("valor_total", ascending=False)

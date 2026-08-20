@@ -38,9 +38,10 @@ Atualmente a API só lê tabelas que já existem em outro sistema (o Protheus). 
 - **SaldoEstoque** (tabela `SB2070` — Saldo Atual de Estoque): `rec_no (R_E_C_N_O_), filial, codigo_produto, local, saldo_atual, quantidade_empenhada, quantidade_reservada, quantidade_pedido_venda, quantidade_pedido_compra, custo_medio, valor_atual`.
 - **Produto** (tabela `SB1000` — Cadastro de Produtos): `rec_no (R_E_C_N_O_), filial, codigo, descricao, tipo, unidade_medida, grupo, local_padrao, conversao, ncm, peso_liquido, peso_bruto, codigo_barras, preco_venda, bloqueado`. Usada também como apoio (join) no relatório `/saldos-estoque/`.
 - **TipoOperacao** (tabela `PA6000` — Tipos de Operação Financeira): `rec_no (R_E_C_N_O_), filial, codigo, descricao`. Usada apenas como apoio (join) no relatório `/financeiro/`, sem rota própria.
-- **ItemCarga** (tabela `DAI070` — Itens de Carga): `rec_no (R_E_C_N_O_), filial, codigo, sequencia_carga, sequencia, data, pedido, cliente, loja, peso, nota_fiscal`. Tabela principal do relatório `/cargas/`.
-- **VeiculoCarga** (tabela `DAK070` — Veículos da Carga): `rec_no (R_E_C_N_O_), filial, codigo, sequencia_carga, caminhao, carreta, valor`. Usada apenas como apoio (join) no relatório `/cargas/`, sem rota própria.
+- **ItemCarga** (tabela `DAI070` — Itens de Carga): `rec_no (R_E_C_N_O_), filial, codigo, sequencia_carga, sequencia, data, pedido, cliente, loja, peso, nota_fiscal, serie`. Tabela principal do relatório `/cargas/`.
+- **VeiculoCarga** (tabela `DAK070` — Veículos da Carga): `rec_no (R_E_C_N_O_), filial, codigo, sequencia_carga, caminhao, status`. Usada apenas como apoio (join) no relatório `/cargas/`, sem rota própria. `status` (`DAK_ACECAR`) é uma customização desta instalação — veja `/cargas/` abaixo.
 - **Cliente** (tabela `SA1070` — Clientes): `rec_no (R_E_C_N_O_), filial, codigo, loja, nome`. Usada apenas como apoio (join) no relatório `/cargas/`, sem rota própria.
+- **NotaFiscalSaida** (tabela `SE1070` — Notas Fiscais de Saída): `rec_no (R_E_C_N_O_), filial, prefixo, numero, cliente, loja, valor`. Usada apenas como apoio (subconsulta correlacionada) no relatório `/cargas/`, para obter o valor da carga, sem rota própria.
 
 Para todas:
 - Registros com `D_E_L_E_T_ = '*'` (exclusão lógica do Protheus) são sempre filtrados pela API, tanto na listagem quanto na busca por id.
@@ -123,7 +124,7 @@ Todos os endpoints são `GET` — não existem rotas `POST`, `PUT` ou `DELETE`.
 | GET    | `/produtos/{rec_no}`               | Obtém um produto pelo `R_E_C_N_O_` |
 | GET    | `/financeiro/`                     | Relatório financeiro (réplica de `select_financeiro.sql`): títulos a pagar (SE2070) com fornecedor (SA2070) e descrição do tipo de operação (PA6000); filtra por `vencimento_de`/`vencimento_ate` |
 | GET    | `/saldos-estoque/`                 | Relatório de saldo de estoque (baseado em `select_estoque_produtos.sql`): saldos (SB2070) com descrição e fator de conversão do produto (SB1000); filtra por `tipo_produto`/`local` |
-| GET    | `/cargas/`                         | Relatório de cargas (baseado em `select_cargas.sql`): itens de carga (DAI070) com veículo (DAK070) e nome do cliente (SA1070); filtra por `data_inicial` |
+| GET    | `/cargas/`                         | Relatório de cargas (baseado em `select_cargas.sql`): itens de carga (DAI070) com veículo (DAK070), nome do cliente (SA1070) e valor da nota fiscal (SE1070); filtra por `data_inicial`/`status` |
 
 Parâmetros comuns de listagem: `skip`, `limit` (paginação), `order_by` (ex.: `nome` ou `-criado_em` para ordem decrescente) e filtros por campo (ex.: `?filial=01`).
 
@@ -158,16 +159,17 @@ O campo `quantidade` replica `B2_QATU / B1_CONV` da consulta original (quantidad
 
 ### `/cargas/`
 
-Baseado no `SELECT` de `select_cargas.sql`: junta `DAI070` (item de carga) com `DAK070` (veículo, join obrigatório por filial/código/sequência de carga) e `SA1070` (cliente, join obrigatório por filial/código/loja — itens sem cliente cadastrado não aparecem). Aplica como regra de negócio fixa (sempre ativa):
+Baseado no `SELECT` de `select_cargas.sql`: junta `DAI070` (item de carga) com `DAK070` (veículo, join obrigatório por filial/código/sequência de carga) e `SA1070` (cliente, join obrigatório por filial/código/loja — itens sem cliente cadastrado não aparecem). O valor da carga vem de uma subconsulta correlacionada em `SE1070` (nota fiscal de saída, casando filial/série/número/cliente/loja — `0` quando não há nota fiscal correspondente, equivalente ao `ISNULL(...,0)` da consulta original), não de `DAK070`. Aplica como regra de negócio fixa (sempre ativa):
 
 - Apenas itens não excluídos (`D_E_L_E_T_ != '*'`);
 - Sequência de item diferente de `999999` (convenção do Protheus para item cancelado).
 
-Diferente da consulta original — que fixa a data mínima em `'20260801'` — aqui a data **não é fixa**: é parametrizável via query string, para que cada cliente/integração decida a partir de qual data quer consultar as cargas.
+Diferente da consulta original — que fixa a data mínima em `'20260801'` e o status em `:STATUS` — aqui os dois **não são fixos**: são parametrizáveis via query string.
 
 - `data_inicial` (opcional): filtra pela data do item (`DAI_DATA`, formato `AAAAMMDD`), trazendo apenas cargas com `data >= data_inicial`. Sem o parâmetro, assume a data atual do sistema (equivalente a `data_inicial=<hoje>`).
+- `status` (opcional): filtra pelo status da carga (`DAK_ACECAR`) — `1` (Faturada), `2` (Conf. Cega), `3` (Prestação de Títulos) ou `7` (Fechada). Sem o parâmetro, traz cargas de qualquer status. `DAK_ACECAR` é uma customização desta instalação do Protheus (no dicionário padrão é "Acerto de Carga Ok?", campo `C(1)` sem lista pública de valores) — esses quatro códigos foram confirmados pelo usuário, não por documentação oficial.
 
-Suporta apenas paginação (`skip`, `limit`) e o filtro acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
+Suporta apenas paginação (`skip`, `limit`) e os filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
 
 O client desktop deste endpoint é `client/app_cargas.py` (veja "Clients desktop" abaixo).
 
@@ -179,7 +181,7 @@ Além da API, o diretório `client/` traz aplicações desktop (Tkinter) que con
 |-----------------------------|---------------------|------------|
 | `client/app_financeiro.py`  | `/financeiro/`      | `vencimento_de`/`vencimento_ate`/`status` já vão para a API (período inicia na data atual, mesmo padrão da API); demais filtros são aplicados no cliente. |
 | `client/app_estoque.py`     | `/saldos-estoque/`  | `tipo_produto`/`local` resolvidos por um seletor de "Tipo de Estoque". |
-| `client/app_cargas.py`      | `/cargas/`          | `data_inicial` é opcional (a API assume a data atual quando ausente); o seletor de data desta tela já inicia na data de hoje, e o usuário pode trocá-la antes de consultar. |
+| `client/app_cargas.py`      | `/cargas/`          | `data_inicial`/`status` já vão para a API (o seletor de data desta tela já inicia na data de hoje, igual ao padrão da API); demais filtros são aplicados no cliente. |
 
 Para rodar:
 

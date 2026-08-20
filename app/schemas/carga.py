@@ -16,5 +16,5 @@ class CargaRead(BaseModel):
     peso: Decimal
     nota_fiscal: str
     caminhao: str
-    carreta: Optional[str] = None
+    status_carga: Optional[str] = None
     valor: Decimal

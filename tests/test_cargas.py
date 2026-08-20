@@ -2,6 +2,7 @@ from datetime import date, timedelta
 
 from app.models.cliente import Cliente
 from app.models.item_carga import ItemCarga
+from app.models.nota_fiscal_saida import NotaFiscalSaida
 from app.models.veiculo_carga import VeiculoCarga
 
 
@@ -24,8 +25,7 @@ def _veiculo(**overrides):
         codigo="000001",
         sequencia_carga="001",
         caminhao="ABC1234",
-        carreta="XYZ5678",
-        valor="1500.00",
+        status="1",
     )
     dados.update(overrides)
     return VeiculoCarga(**dados)
@@ -44,9 +44,24 @@ def _item(**overrides):
         loja="01",
         peso="1000.0000",
         nota_fiscal="000789",
+        serie="1",
     )
     dados.update(overrides)
     return ItemCarga(**dados)
+
+
+def _nota_fiscal(**overrides):
+    dados = dict(
+        deletado=" ",
+        filial="01",
+        prefixo="1",
+        numero="000789",
+        cliente="000456",
+        loja="01",
+        valor="1500.00",
+    )
+    dados.update(overrides)
+    return NotaFiscalSaida(**dados)
 
 
 def test_requer_api_key(client):
@@ -54,7 +69,7 @@ def test_requer_api_key(client):
 
 
 def test_lista_com_join_de_veiculo_e_cliente(client, auth_headers, db_session):
-    db_session.add_all([_cliente(), _veiculo(), _item()])
+    db_session.add_all([_cliente(), _veiculo(), _item(), _nota_fiscal()])
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
@@ -65,8 +80,66 @@ def test_lista_com_join_de_veiculo_e_cliente(client, auth_headers, db_session):
     assert item["codigo"] == "000001"
     assert item["nome_cliente"] == "Cliente Exemplo Ltda"
     assert item["caminhao"] == "ABC1234"
-    assert item["carreta"] == "XYZ5678"
+    assert item["status_carga"] == "1"
     assert item["valor"] == "1500.00"
+
+
+def test_valor_vem_da_nota_fiscal_nao_do_veiculo(client, auth_headers, db_session):
+    # select_cargas.sql busca o valor em SE1070 (nota fiscal), casando
+    # filial/série/número/cliente/loja — não é um campo de DAK070.
+    db_session.add_all(
+        [
+            _cliente(),
+            _veiculo(),
+            _item(serie="2", nota_fiscal="000999"),
+            _nota_fiscal(prefixo="2", numero="000999", valor="777.77"),
+            _nota_fiscal(prefixo="1", numero="000789", valor="1500.00"),  # não deve casar
+        ]
+    )
+    db_session.commit()
+
+    resposta = client.get("/cargas/", headers=auth_headers)
+    dados = resposta.json()
+    assert dados["total"] == 1
+    assert dados["items"][0]["valor"] == "777.77"
+
+
+def test_valor_e_zero_sem_nota_fiscal_correspondente(client, auth_headers, db_session):
+    db_session.add_all([_cliente(), _veiculo(), _item()])
+    db_session.commit()
+
+    resposta = client.get("/cargas/", headers=auth_headers)
+    dados = resposta.json()
+    assert dados["total"] == 1
+    assert dados["items"][0]["valor"] == "0.00"
+
+
+def test_filtro_status_via_query_string(client, auth_headers, db_session):
+    db_session.add_all(
+        [
+            _cliente(),
+            _veiculo(codigo="000001", sequencia_carga="001", status="1"),
+            _item(codigo="000001", sequencia_carga="001"),
+            _veiculo(codigo="000002", sequencia_carga="001", status="7"),
+            _item(codigo="000002", sequencia_carga="001"),
+        ]
+    )
+    db_session.commit()
+
+    resposta = client.get("/cargas/?status=1", headers=auth_headers)
+    dados = resposta.json()
+    assert dados["total"] == 1
+    assert dados["items"][0]["codigo"] == "000001"
+
+    resposta = client.get("/cargas/?status=7", headers=auth_headers)
+    dados = resposta.json()
+    assert dados["total"] == 1
+    assert dados["items"][0]["codigo"] == "000002"
+
+
+def test_filtro_status_invalido_retorna_422(client, auth_headers):
+    resposta = client.get("/cargas/?status=9", headers=auth_headers)
+    assert resposta.status_code == 422
 
 
 def test_item_sem_veiculo_correspondente_e_ignorado(client, auth_headers, db_session):

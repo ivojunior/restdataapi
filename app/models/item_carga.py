@@ -26,3 +26,4 @@ class ItemCarga(Base):
     loja = Column("DAI_LOJA", String(3))
     peso = Column("DAI_PESO", Numeric(18, 4))
     nota_fiscal = Column("DAI_NFISCA", String(9))
+    serie = Column("DAI_SERIE", String(3))

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Numeric, String
+from sqlalchemy import Column, Integer, String
 
 from app.database import Base
 
@@ -20,5 +20,9 @@ class VeiculoCarga(Base):
     codigo = Column("DAK_COD", String(6))
     sequencia_carga = Column("DAK_SEQCAR", String(6))
     caminhao = Column("DAK_CAMINH", String(10))
-    carreta = Column("DAK_ACECAR", String(10))
-    valor = Column("DAK_VALOR", Numeric(18, 2))
+    # Apesar do nome (dicionário padrão do Protheus: "Acerto de Carga Ok?"),
+    # nesta instalação DAK_ACECAR foi customizado para guardar o status da
+    # carga ("1"=Faturada, "2"=Conf. Cega, "3"=Prestação de Títulos,
+    # "7"=Fechada — confirmado pelo usuário; não há lista pública desses
+    # valores para esse campo, que é específico desta customização).
+    status = Column("DAK_ACECAR", String(1))
