@@ -226,7 +226,7 @@ class FinanceiroApp:
     def _build_periodo_frame(self) -> None:
         f = ttk.LabelFrame(
             self.root,
-            text="Período e status (define vencimento_de/vencimento_ate/status enviados à API — recarrega ao consultar)",
+            text="Período e status (define vencimento_de/vencimento_ate/status enviados ao Protheus — recarrega ao consultar)",
             padding=(10, 6),
         )
         f.pack(fill="x", padx=12, pady=(8, 3))

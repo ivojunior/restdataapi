@@ -169,7 +169,7 @@ class EstoqueApp:
     def _build_tipo_estoque_frame(self) -> None:
         f = ttk.LabelFrame(
             self.root,
-            text="Tipo de Estoque a analisar (recarrega da API ao mudar)",
+            text="Tipo de Estoque a analisar (recarrega do Protheus ao mudar)",
             padding=(10, 6),
         )
         f.pack(fill="x", padx=12, pady=3)

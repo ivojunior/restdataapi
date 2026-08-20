@@ -227,12 +227,12 @@ class CargasApp:
     def _build_periodo_frame(self) -> None:
         f = ttk.LabelFrame(
             self.root,
-            text="Período e status (define data_inicial/data_final/status enviados à API — recarrega ao consultar)",
+            text="Período e status (define data_inicial/data_final/status enviados ao Protheus — recarrega ao consultar)",
             padding=(10, 6),
         )
         f.pack(fill="x", padx=12, pady=3)
 
-        ttk.Label(f, text="Data mínima de:").grid(
+        ttk.Label(f, text="Data de:").grid(
             row=0, column=0, sticky="w", padx=(0, 6))
 
         self._data_inicial_var = tk.StringVar()
@@ -244,7 +244,7 @@ class CargasApp:
         self._de_data_inicial.set_date(date.today())
         self._de_data_inicial.grid(row=0, column=1, sticky="w")
 
-        ttk.Label(f, text="Data mínima até:").grid(
+        ttk.Label(f, text="Data até:").grid(
             row=0, column=2, sticky="w", padx=(14, 6))
 
         self._data_final_var = tk.StringVar()
