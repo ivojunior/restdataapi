@@ -5,13 +5,15 @@ Exibe filtro de data mínima (enviado à API), filtros locais, KPIs, gráficos
 analíticos e exporta tudo para Excel.
 
 O endpoint /cargas aplica sempre como regra fixa apenas itens não excluídos
-e não cancelados. A data mínima da carga (data_inicial) e o status da carga
-(status, campo DAK_ACECAR) são enviados à API como query string — o seletor
-de data desta tela já inicia na data atual do sistema (mesmo padrão que a
-API assume quando o parâmetro não é enviado) e o usuário pode alterá-lo para
-consultar outro período antes de carregar. Os demais filtros (filial,
-cliente, caminhão) são aplicados no cliente, após o carregamento completo
-dos dados.
+e não cancelados. O período da carga (data_inicial/data_final) é enviado à
+API como query string — os seletores de data desta tela já iniciam na data
+atual do sistema (mesmo padrão que a API assume quando o parâmetro não é
+enviado) e o usuário pode alterá-los para consultar outro período antes de
+carregar. O status da carga (campo DAK_ACECAR) não é mais filtrado na API:
+o campo é classificado no cliente em apenas 2 tipos — "Aberta" ou
+"Encerrada" (veja _fmt_status) — e esse filtro, junto com os demais
+(filial, cliente, caminhão), é aplicado localmente, após o carregamento
+completo dos dados.
 
 Requisitos:  pip install requests matplotlib pandas openpyxl python-dotenv tkcalendar
 """
@@ -48,23 +50,14 @@ CHART_COLORS = [
     "#16a085", "#d35400", "#2c3e50", "#c0392b", "#1abc9c",
 ]
 
-# Rótulo exibido -> valor do parâmetro "status" aceito pelo endpoint /cargas
-# (campo DAK_ACECAR — customização desta instalação do Protheus, sem lista
-# pública de valores; confirmados pelo usuário).
-STATUS_CARGA: Dict[str, str] = {
-    "Montada":           "1",
-    "Disp Conf Gega":    "2",
-    "Disp Prest Contas": "3",
-    "Disp Prest Títulos":"6",
-    "Encerrada":         "7",
-    "Juros Pendentes":   "8",
-}
-STATUS_CARGA_LABELS: Dict[str, str] = {v: k for k, v in STATUS_CARGA.items()}
 STATUS_FILTRO_PADRAO = "(Todos)"
 
-# Status considerados "fechados" para o card "Valor em Aberto": tudo que não
-# for Encerrada (7) ou Juros Pendentes (8) ainda está em aberto.
+# Classificação do campo Status (DAK_ACECAR — customização desta instalação
+# do Protheus, sem lista pública de valores; confirmados pelo usuário): só
+# existem 2 tipos exibidos/filtrados no cliente. Tudo que não for Encerrada
+# (7) ou Juros Pendentes (8) é considerado Aberta.
 STATUS_CARGA_FECHADOS = {"7", "8"}
+STATUS_CARGA_OPCOES = ["Aberta", "Encerrada"]
 
 TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
     ("filial",        "Filial",      55,  "c"),
@@ -104,8 +97,12 @@ def _fmt_date(s) -> str:
 
 
 def _fmt_status(v) -> str:
+    """Classifica o status da carga (DAK_ACECAR) em apenas 2 tipos:
+    "Encerrada" (7 ou 8) ou "Aberta" (demais valores)."""
     s = str(v or "").strip()
-    return STATUS_CARGA_LABELS.get(s, s or "—")
+    if not s:
+        return "—"
+    return "Encerrada" if s in STATUS_CARGA_FECHADOS else "Aberta"
 
 
 # Placa usada para indicar que o próprio cliente retirou a carga (sem
@@ -253,7 +250,7 @@ class CargasApp:
     def _build_periodo_frame(self) -> None:
         f = ttk.LabelFrame(
             self.root,
-            text="Período e status (define data_inicial/data_final/status enviados ao Protheus — recarrega ao consultar)",
+            text="Período (define data_inicial/data_final enviados ao Protheus — recarrega ao consultar)",
             padding=(10, 6),
         )
         f.pack(fill="x", padx=12, pady=3)
@@ -282,18 +279,11 @@ class CargasApp:
         self._de_data_final.set_date(date.today())
         self._de_data_final.grid(row=0, column=3, sticky="w")
 
-        ttk.Label(f, text="Status:").grid(row=0, column=4, sticky="w", padx=(14, 3))
-        self._f_status = tk.StringVar(value=STATUS_FILTRO_PADRAO)
-        ttk.Combobox(
-            f, textvariable=self._f_status, width=16, state="readonly",
-            values=[STATUS_FILTRO_PADRAO, *STATUS_CARGA.keys()],
-        ).grid(row=0, column=5, sticky="w")
-
         ttk.Label(
             f,
             text="(por padrão, o período já inicia e termina hoje; amplie as datas para consultar outro período)",
             foreground="#7f8c8d",
-        ).grid(row=0, column=6, sticky="w", padx=(10, 0))
+        ).grid(row=0, column=4, sticky="w", padx=(10, 0))
 
     # ── filtros (aplicados no cliente, após o carregamento) ────────────────────
 
@@ -319,6 +309,14 @@ class CargasApp:
             ttk.Entry(f, textvariable=var, width=width).grid(
                 row=0, column=col + 1, sticky="ew")
             col += 2
+
+        ttk.Label(f, text="Status:").grid(row=0, column=col, sticky="w", padx=(14, 3))
+        self._f_status = tk.StringVar(value=STATUS_FILTRO_PADRAO)
+        ttk.Combobox(
+            f, textvariable=self._f_status, width=14, state="readonly",
+            values=[STATUS_FILTRO_PADRAO, *STATUS_CARGA_OPCOES],
+        ).grid(row=0, column=col + 1, sticky="w")
+        col += 2
 
         btn = ttk.Frame(f)
         btn.grid(row=0, column=col, sticky="e", padx=(20, 0))
@@ -472,22 +470,17 @@ class CargasApp:
         self._loading = True
         self._clear_data()
 
-        status_label = self._f_status.get()
-        status = STATUS_CARGA.get(status_label)
-
         periodo = f"de {self._data_inicial_var.get()} até {self._data_final_var.get()}"
-        if status:
-            periodo += f", status={status_label}"
         self._set_status(f"Consultando /cargas na API… [{periodo}]", indeterminate=True)
         threading.Thread(
-            target=self._fetch_thread, args=(data_inicial, data_final, status), daemon=True
+            target=self._fetch_thread, args=(data_inicial, data_final), daemon=True
         ).start()
 
-    def _fetch_thread(self, data_inicial: str, data_final: str, status: Optional[str]) -> None:
+    def _fetch_thread(self, data_inicial: str, data_final: str) -> None:
         try:
             client = self._make_client()
             items, total = client.get_all_cargas(
-                data_inicial=data_inicial, data_final=data_final, status=status,
+                data_inicial=data_inicial, data_final=data_final,
                 progress_callback=self._on_progress)
             self.root.after(0, self._on_data_ready, items, total)
         except Exception as exc:
@@ -566,6 +559,10 @@ class CargasApp:
         if caminhao:
             labels = df["caminhao"].apply(_fmt_caminhao).str.lower()
             df = df[labels.str.contains(caminhao)]
+
+        status = self._f_status.get()
+        if status and status != STATUS_FILTRO_PADRAO:
+            df = df[df["status_carga"].apply(_fmt_status) == status]
 
         return df
 
@@ -789,6 +786,7 @@ class CargasApp:
     def limpar(self) -> None:
         for attr in ("_f_filial", "_f_cliente", "_f_caminhao"):
             getattr(self, attr).set("")
+        self._f_status.set(STATUS_FILTRO_PADRAO)
         if self._df_raw is not None:
             self._apply_filters_and_refresh()
         self._set_status("Filtros limpos.")

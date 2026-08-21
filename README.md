@@ -182,7 +182,7 @@ Além da API, o diretório `client/` traz aplicações desktop (Tkinter) que con
 |-----------------------------|---------------------|------------|
 | `client/app_financeiro.py`  | `/financeiro/`      | `vencimento_de`/`vencimento_ate`/`status` já vão para a API (período inicia na data atual, mesmo padrão da API); demais filtros são aplicados no cliente. |
 | `client/app_estoque.py`     | `/saldos-estoque/`  | `tipo_produto`/`local` resolvidos por um seletor de "Tipo de Estoque". |
-| `client/app_cargas.py`      | `/cargas/`          | `data_inicial`/`data_final`/`status` já vão para a API (os dois seletores de data — "Data mínima de"/"Data mínima até" — já iniciam na data de hoje, igual ao padrão da API); demais filtros são aplicados no cliente. Placa `KHA0902` é exibida como "Cliente" (retirada pelo próprio cliente, sem caminhão terceirizado). |
+| `client/app_cargas.py`      | `/cargas/`          | `data_inicial`/`data_final` já vão para a API (os dois seletores de data — "Data de"/"Data até" — já iniciam na data de hoje, igual ao padrão da API); demais filtros, incluindo Status (classificado em "Aberta"/"Encerrada" a partir de `DAK_ACECAR`), são aplicados no cliente. Placa `KHA0902` é exibida como "Cliente" (retirada pelo próprio cliente, sem caminhão terceirizado). |
 
 Para rodar:
 
