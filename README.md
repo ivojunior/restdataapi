@@ -41,7 +41,7 @@ Atualmente a API só lê tabelas que já existem em outro sistema (o Protheus). 
 - **ItemCarga** (tabela `DAI070` — Itens de Carga): `rec_no (R_E_C_N_O_), filial, codigo, sequencia_carga, sequencia, data, pedido, cliente, loja, peso, nota_fiscal, serie`. Tabela principal do relatório `/cargas/`.
 - **VeiculoCarga** (tabela `DAK070` — Veículos da Carga): `rec_no (R_E_C_N_O_), filial, codigo, sequencia_carga, caminhao, status`. Usada apenas como apoio (join) no relatório `/cargas/`, sem rota própria. `status` (`DAK_ACECAR`) é uma customização desta instalação — veja `/cargas/` abaixo.
 - **Cliente** (tabela `SA1070` — Clientes): `rec_no (R_E_C_N_O_), filial, codigo, loja, nome`. Usada apenas como apoio (join) no relatório `/cargas/`, sem rota própria.
-- **NotaFiscalSaida** (tabela `SE1070` — Notas Fiscais de Saída): `rec_no (R_E_C_N_O_), filial, prefixo, numero, cliente, loja, valor`. Usada apenas como apoio (subconsulta correlacionada) no relatório `/cargas/`, para obter o valor da carga, sem rota própria.
+- **NotaFiscalSaida** (tabela `SE1070` — Notas Fiscais de Saída): `rec_no (R_E_C_N_O_), filial, prefixo, numero, cliente, loja, valor`. Usada apenas como apoio (LEFT JOIN) no relatório `/cargas/`, para obter o valor da carga, sem rota própria.
 
 Para todas:
 - Registros com `D_E_L_E_T_ = '*'` (exclusão lógica do Protheus) são sempre filtrados pela API, tanto na listagem quanto na busca por id.
@@ -159,7 +159,7 @@ O campo `quantidade` replica `B2_QATU / B1_CONV` da consulta original (quantidad
 
 ### `/cargas/`
 
-Baseado no `SELECT` de `select_cargas.sql`: junta `DAI070` (item de carga) com `DAK070` (veículo, join obrigatório por filial/código/sequência de carga) e `SA1070` (cliente, join obrigatório por filial/código/loja — itens sem cliente cadastrado não aparecem). O valor da carga vem de uma subconsulta correlacionada em `SE1070` (nota fiscal de saída, casando filial/série/número/cliente/loja — `0` quando não há nota fiscal correspondente, equivalente ao `ISNULL(...,0)` da consulta original), não de `DAK070`. Aplica como regra de negócio fixa (sempre ativa):
+Baseado no `SELECT` de `select_cargas.sql`: junta `DAI070` (item de carga) com `DAK070` (veículo, join obrigatório por filial/código/sequência de carga) e `SA1070` (cliente, join obrigatório por filial/código/loja — itens sem cliente cadastrado não aparecem). O valor da carga vem de um LEFT JOIN com `SE1070` (nota fiscal de saída, casando filial/série/número/cliente/loja — `0` quando não há nota fiscal correspondente, equivalente ao `ISNULL(...,0)` da consulta original), não de `DAK070`. A consulta original usa uma subconsulta correlacionada (uma execução por linha) para esse valor; aqui foi trocada por um LEFT JOIN único — bem mais rápido em relatórios de vários dias, já que evita repetir a busca em `SE1070` item a item. Aplica como regra de negócio fixa (sempre ativa):
 
 - Apenas itens não excluídos (`D_E_L_E_T_ != '*'`);
 - Sequência de item diferente de `999999` (convenção do Protheus para item cancelado).

@@ -2,7 +2,7 @@ import enum
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, Query
@@ -47,26 +47,31 @@ def _query_cargas(
     data_final: Optional[str] = None,
     status: Optional[StatusCargaFiltro] = None,
 ):
-    # select_cargas.sql busca o valor da carga com uma subconsulta correlacionada
-    # em SE1070 (nota fiscal), casando filial/série/número/cliente/loja — não é
-    # DAK_VALOR. ISNULL(...,0) na query original == coalesce(...,0) aqui.
-    valor_nota_fiscal = (
-        select(NotaFiscalSaida.valor)
-        .where(
-            NotaFiscalSaida.deletado != "*",
-            NotaFiscalSaida.filial == ItemCarga.filial,
-            NotaFiscalSaida.prefixo == ItemCarga.serie,
-            NotaFiscalSaida.numero == ItemCarga.nota_fiscal,
-            NotaFiscalSaida.cliente == ItemCarga.cliente,
-            NotaFiscalSaida.loja == ItemCarga.loja,
-        )
-        .correlate(ItemCarga)
-        .scalar_subquery()
-    )
-    valor_coluna = func.coalesce(valor_nota_fiscal, 0)
-
+    # select_cargas.sql busca o valor da carga em SE1070 (nota fiscal), casando
+    # filial/série/número/cliente/loja — não é DAK_VALOR. Diferente da consulta
+    # original, aqui isso é resolvido com LEFT JOIN em vez de subconsulta
+    # correlacionada por linha: com muitos itens no período (relatórios de
+    # mais de ~2 dias), uma subconsulta executada uma vez por linha é bem mais
+    # lenta do que um único JOIN resolvido de uma vez pelo otimizador do
+    # banco. ISNULL(...,0) da consulta original == coalesce(...,0) aqui — o
+    # join casa no máximo 1 nota fiscal por item (mesma suposição de
+    # unicidade da consulta original). Também selecionamos só as colunas
+    # necessárias (não as entidades inteiras), para reduzir os dados
+    # trafegados por linha.
     query = (
-        db.query(ItemCarga, VeiculoCarga, Cliente.nome, valor_coluna)
+        db.query(
+            ItemCarga.filial,
+            ItemCarga.codigo,
+            ItemCarga.data,
+            ItemCarga.pedido,
+            ItemCarga.cliente,
+            ItemCarga.peso,
+            ItemCarga.nota_fiscal,
+            VeiculoCarga.caminhao,
+            VeiculoCarga.status,
+            Cliente.nome,
+            func.coalesce(NotaFiscalSaida.valor, 0),
+        )
         .join(
             VeiculoCarga,
             and_(
@@ -83,6 +88,17 @@ def _query_cargas(
                 Cliente.filial == ItemCarga.filial,
                 Cliente.codigo == ItemCarga.cliente,
                 Cliente.loja == ItemCarga.loja,
+            ),
+        )
+        .outerjoin(
+            NotaFiscalSaida,
+            and_(
+                NotaFiscalSaida.deletado != "*",
+                NotaFiscalSaida.filial == ItemCarga.filial,
+                NotaFiscalSaida.prefixo == ItemCarga.serie,
+                NotaFiscalSaida.numero == ItemCarga.nota_fiscal,
+                NotaFiscalSaida.cliente == ItemCarga.cliente,
+                NotaFiscalSaida.loja == ItemCarga.loja,
             ),
         )
         .filter(
@@ -141,19 +157,22 @@ def listar_cargas(
 
     items = [
         CargaRead(
-            filial=item.filial,
-            codigo=item.codigo,
-            data=item.data,
-            pedido=item.pedido,
-            cliente=item.cliente,
+            filial=filial,
+            codigo=codigo,
+            data=data,
+            pedido=pedido,
+            cliente=cliente,
             nome_cliente=nome_cliente,
-            peso=item.peso,
-            nota_fiscal=item.nota_fiscal,
-            caminhao=veiculo.caminhao,
-            status_carga=veiculo.status,
+            peso=peso,
+            nota_fiscal=nota_fiscal,
+            caminhao=caminhao,
+            status_carga=status_carga,
             valor=valor,
         )
-        for item, veiculo, nome_cliente, valor in linhas
+        for (
+            filial, codigo, data, pedido, cliente, peso, nota_fiscal,
+            caminhao, status_carga, nome_cliente, valor,
+        ) in linhas
     ]
 
     return {"total": total, "skip": skip, "limit": limit, "items": items}
