@@ -168,7 +168,7 @@ Diferente da consulta original — que fixa a data mínima em `'20260801'` e o s
 
 - `data_inicial` (opcional): filtra pela data do item (`DAI_DATA`, formato `AAAAMMDD`), trazendo apenas cargas com `data >= data_inicial`. Sem o parâmetro, assume a data atual do sistema (equivalente a `data_inicial=<hoje>`).
 - `data_final` (opcional): filtra pela data do item (`DAI_DATA`, formato `AAAAMMDD`), trazendo apenas cargas com `data <= data_final`. Sem o parâmetro, não há limite superior.
-- `status` (opcional): filtra pelo status da carga (`DAK_ACECAR`) — `1` (Montada), `2` (Disp Conf Gega), `3` (Disp Prest Contas), `6` (Disp Prest Títulos), `7` (Encerrada) ou `8` (Juros Pendentes). Sem o parâmetro, traz cargas de qualquer status. `DAK_ACECAR` é uma customização desta instalação do Protheus (no dicionário padrão é "Acerto de Carga Ok?", campo `C(1)` sem lista pública de valores) — esses seis códigos foram confirmados pelo usuário, não por documentação oficial.
+- `status` (opcional): filtra pelo status da carga (`DAK_ACECAR`), classificado em apenas 2 tipos — `encerrada` (códigos `7` ou `8`) ou `aberta` (demais códigos). Sem o parâmetro, traz cargas de qualquer status. `DAK_ACECAR` é uma customização desta instalação do Protheus (no dicionário padrão é "Acerto de Carga Ok?", campo `C(1)` sem lista pública de valores) — os códigos `7`/`8` foram confirmados pelo usuário, não por documentação oficial. O filtro é resolvido no banco (`IN`/`NOT IN`), não no cliente, para não trafegar o volume completo do relatório a cada consulta.
 
 Suporta apenas paginação (`skip`, `limit`) e os filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
 
@@ -182,7 +182,7 @@ Além da API, o diretório `client/` traz aplicações desktop (Tkinter) que con
 |-----------------------------|---------------------|------------|
 | `client/app_financeiro.py`  | `/financeiro/`      | `vencimento_de`/`vencimento_ate`/`status` já vão para a API (período inicia na data atual, mesmo padrão da API); demais filtros são aplicados no cliente. |
 | `client/app_estoque.py`     | `/saldos-estoque/`  | `tipo_produto`/`local` resolvidos por um seletor de "Tipo de Estoque". |
-| `client/app_cargas.py`      | `/cargas/`          | `data_inicial`/`data_final` já vão para a API (os dois seletores de data — "Data de"/"Data até" — já iniciam na data de hoje, igual ao padrão da API); demais filtros, incluindo Status (classificado em "Aberta"/"Encerrada" a partir de `DAK_ACECAR`), são aplicados no cliente. Placa `KHA0902` é exibida como "Cliente" (retirada pelo próprio cliente, sem caminhão terceirizado). |
+| `client/app_cargas.py`      | `/cargas/`          | `data_inicial`/`data_final`/`status` já vão para a API (os dois seletores de data — "Data de"/"Data até" — já iniciam na data de hoje, igual ao padrão da API; Status tem só "Aberta"/"Encerrada", resolvido no banco por causa do volume do relatório); demais filtros (filial, cliente, caminhão) são aplicados no cliente. Placa `KHA0902` é exibida como "Cliente" (retirada pelo próprio cliente, sem caminhão terceirizado). |
 
 Para rodar:
 

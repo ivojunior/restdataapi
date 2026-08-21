@@ -112,10 +112,11 @@ class APIClient:
         excluídos e não cancelados; o período (data_inicial/data_final) é
         parametrizável — é o cliente quem decide o intervalo de datas a
         consultar. Sem data_inicial, a API assume a data atual do sistema;
-        sem data_final, não há limite superior. `status` ("1", "2", "3",
-        "6", "7" ou "8") filtra pelo status da carga (DAK_ACECAR). Qualquer
-        outro filtro (filial, cliente, caminhão etc.) é aplicado no
-        cliente, após o carregamento completo dos dados.
+        sem data_final, não há limite superior. `status` ("aberta" ou
+        "encerrada") filtra pelo status da carga (DAK_ACECAR), classificado
+        em apenas esses 2 tipos pela própria API. Qualquer outro filtro
+        (filial, cliente, caminhão etc.) é aplicado no cliente, após o
+        carregamento completo dos dados.
         """
         all_items: List[Dict] = []
         skip = 0

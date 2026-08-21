@@ -86,7 +86,7 @@ class EstoqueApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Relatório de Saldo de Estoque — Grupo LGH (sem o Broker)")
-        self.root.geometry("1280x820")
+        self.root.geometry("1280x1090")
         self.root.minsize(960, 620)
         self.root.configure(bg="#f0f2f5")
 
@@ -144,8 +144,8 @@ class EstoqueApp:
         self._build_filter_frame()
         self._build_kpi_frame()
         self._build_toolbar()
-        self._build_notebook()
         self._build_statusbar()
+        self._build_notebook()
 
     # ── cabeçalho (logotipo + conexão, na mesma linha) ──────────────────────
 

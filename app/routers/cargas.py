@@ -27,23 +27,25 @@ router = APIRouter(
 _SEQUENCIA_CANCELADA = "999999"
 
 
-class StatusCarga(str, enum.Enum):
-    """Valores de DAK_ACECAR confirmados pelo usuário para esta customização
-    (o campo não tem lista pública de opções — veja app/models/veiculo_carga.py)."""
+# Códigos de DAK_ACECAR (customização desta instalação do Protheus, sem
+# lista pública de valores — confirmados pelo usuário) considerados
+# "fechados". Qualquer outro código é considerado "aberto".
+_STATUS_CARGA_FECHADOS = ("7", "8")
 
-    montada = "1"
-    disp_conf_gega = "2"
-    disp_prest_contas = "3"
-    disp_prest_titulos = "6"
-    encerrada = "7"
-    juros_pendentes = "8"
+
+class StatusCargaFiltro(str, enum.Enum):
+    """Classificação do status da carga (DAK_ACECAR) em apenas 2 tipos:
+    "encerrada" (códigos 7 e 8) ou "aberta" (demais códigos)."""
+
+    aberta = "aberta"
+    encerrada = "encerrada"
 
 
 def _query_cargas(
     db: Session,
     data_inicial: str,
     data_final: Optional[str] = None,
-    status: Optional[StatusCarga] = None,
+    status: Optional[StatusCargaFiltro] = None,
 ):
     # select_cargas.sql busca o valor da carga com uma subconsulta correlacionada
     # em SE1070 (nota fiscal), casando filial/série/número/cliente/loja — não é
@@ -95,8 +97,10 @@ def _query_cargas(
     )
     if data_final:
         query = query.filter(ItemCarga.data <= data_final)
-    if status:
-        query = query.filter(VeiculoCarga.status == status.value)
+    if status == StatusCargaFiltro.encerrada:
+        query = query.filter(VeiculoCarga.status.in_(_STATUS_CARGA_FECHADOS))
+    elif status == StatusCargaFiltro.aberta:
+        query = query.filter(VeiculoCarga.status.notin_(_STATUS_CARGA_FECHADOS))
     return query
 
 
@@ -114,12 +118,11 @@ def listar_cargas(
         description="Data máxima da carga, formato AAAAMMDD (DAI_DATA <= data_final). "
         "Sem o parâmetro, não há limite superior.",
     ),
-    status: Optional[StatusCarga] = Query(
+    status: Optional[StatusCargaFiltro] = Query(
         None,
-        description="Filtra pelo status da carga (DAK_ACECAR): 1=Montada, "
-        "2=Disp Conf Gega, 3=Disp Prest Contas, 6=Disp Prest Títulos, "
-        "7=Encerrada, 8=Juros Pendentes. Sem o parâmetro, traz cargas de "
-        "qualquer status.",
+        description="Filtra pelo status da carga (DAK_ACECAR), classificado em "
+        "apenas 2 tipos: 'encerrada' (códigos 7 ou 8) ou 'aberta' (demais "
+        "códigos). Sem o parâmetro, traz cargas de qualquer status.",
     ),
     db: Session = Depends(get_db),
 ):

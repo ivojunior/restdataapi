@@ -143,7 +143,7 @@ class FinanceiroApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Relatório Financeiro — Grupo LGH (sem o Broker)")
-        self.root.geometry("1340x860")
+        self.root.geometry("1340x1160")
         self.root.minsize(980, 640)
         self.root.configure(bg="#f0f2f5")
 
@@ -201,8 +201,8 @@ class FinanceiroApp:
         self._build_filter_frame()
         self._build_kpi_frame()
         self._build_toolbar()
-        self._build_notebook()
         self._build_statusbar()
+        self._build_notebook()
 
     # ── cabeçalho (logotipo + conexão, na mesma linha) ──────────────────────
 
