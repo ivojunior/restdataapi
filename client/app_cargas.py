@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import threading
 from datetime import date, datetime
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 import tkinter as tk
 from typing import Dict, List, Optional, Tuple
@@ -30,10 +31,14 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import matplotlib.ticker as mticker
 import pandas as pd
+from PIL import Image, ImageTk
 from tkcalendar import DateEntry
 
 from api_client import APIClient
 from config import API_BASE_URL, API_KEY, API_KEY_NAME
+
+LOGO_PATH = Path(__file__).resolve().parent / "logo.jpg"
+LOGO_ALTURA_PX = 46
 
 
 # ── constantes ───────────────────────────────────────────────────────────────
@@ -192,7 +197,7 @@ class CargasApp:
     # ── construção da UI ─────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
-        self._build_conn_frame()
+        self._build_header_frame()
         self._build_periodo_frame()
         self._build_filter_frame()
         self._build_kpi_frame()
@@ -200,11 +205,32 @@ class CargasApp:
         self._build_notebook()
         self._build_statusbar()
 
+    # ── cabeçalho (logotipo + conexão, na mesma linha) ──────────────────────
+
+    def _build_header_frame(self) -> None:
+        row = tk.Frame(self.root, bg="#f0f2f5")
+        row.pack(fill="x")
+
+        logo_holder = tk.Frame(row, bg="#ffffff",
+                               highlightbackground="#d5d8dc", highlightthickness=1)
+        logo_holder.pack(side="left", fill="y", padx=(12, 8), pady=(8, 3))
+        try:
+            img = Image.open(LOGO_PATH)
+            largura = round(img.width * (LOGO_ALTURA_PX / img.height))
+            img = img.resize((largura, LOGO_ALTURA_PX), Image.LANCZOS)
+            self._logo_img = ImageTk.PhotoImage(img)
+            tk.Label(logo_holder, image=self._logo_img, bg="#ffffff").pack(
+                padx=10, pady=6)
+        except Exception:
+            pass
+
+        self._build_conn_frame(row)
+
     # ── conexão ──────────────────────────────────────────────────────────────
 
-    def _build_conn_frame(self) -> None:
-        f = ttk.LabelFrame(self.root, text="Conexão", padding=(10, 6))
-        f.pack(fill="x", padx=12, pady=(8, 3))
+    def _build_conn_frame(self, parent: tk.Frame) -> None:
+        f = ttk.LabelFrame(parent, text="Conexão", padding=(10, 6))
+        f.pack(side="left", fill="both", expand=True, padx=(0, 12), pady=(8, 3))
 
         ttk.Label(f, text="URL da API:").grid(row=0, column=0, sticky="w", padx=(0, 4))
         self._url_var = tk.StringVar(value=API_BASE_URL)
@@ -238,7 +264,7 @@ class CargasApp:
         self._data_inicial_var = tk.StringVar()
         self._de_data_inicial = DateEntry(
             f, textvariable=self._data_inicial_var, width=12,
-            date_pattern="dd/mm/yyyy",
+            date_pattern="dd/mm/yyyy", locale="pt_BR",
             background="#1a5276", foreground="white", borderwidth=1,
         )
         self._de_data_inicial.set_date(date.today())
@@ -250,7 +276,7 @@ class CargasApp:
         self._data_final_var = tk.StringVar()
         self._de_data_final = DateEntry(
             f, textvariable=self._data_final_var, width=12,
-            date_pattern="dd/mm/yyyy",
+            date_pattern="dd/mm/yyyy", locale="pt_BR",
             background="#1a5276", foreground="white", borderwidth=1,
         )
         self._de_data_final.set_date(date.today())

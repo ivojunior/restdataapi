@@ -176,7 +176,7 @@ O client desktop deste endpoint é `client/app_cargas.py` (veja "Clients desktop
 
 ## Clients desktop
 
-Além da API, o diretório `client/` traz aplicações desktop (Tkinter) que consomem os relatórios via `APIClient` (`client/api_client.py`), com filtros, KPIs, gráficos e exportação para Excel:
+Além da API, o diretório `client/` traz aplicações desktop (Tkinter) que consomem os relatórios via `APIClient` (`client/api_client.py`), com filtros, KPIs, gráficos e exportação para Excel. Os três exibem o logotipo (`client/logo.jpg`) no canto superior esquerdo da janela; se o arquivo não existir, o cabeçalho é exibido sem logotipo, sem interromper a aplicação:
 
 | Script                     | Endpoint            | Observação |
 |-----------------------------|---------------------|------------|
