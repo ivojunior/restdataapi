@@ -2,7 +2,7 @@ import enum
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, Query
@@ -47,17 +47,35 @@ def _query_cargas(
     data_final: Optional[str] = None,
     status: Optional[StatusCargaFiltro] = None,
 ):
-    # select_cargas.sql busca o valor da carga em SE1070 (nota fiscal), casando
-    # filial/série/número/cliente/loja — não é DAK_VALOR. Diferente da consulta
-    # original, aqui isso é resolvido com LEFT JOIN em vez de subconsulta
-    # correlacionada por linha: com muitos itens no período (relatórios de
-    # mais de ~2 dias), uma subconsulta executada uma vez por linha é bem mais
-    # lenta do que um único JOIN resolvido de uma vez pelo otimizador do
-    # banco. ISNULL(...,0) da consulta original == coalesce(...,0) aqui — o
-    # join casa no máximo 1 nota fiscal por item (mesma suposição de
-    # unicidade da consulta original). Também selecionamos só as colunas
-    # necessárias (não as entidades inteiras), para reduzir os dados
-    # trafegados por linha.
+    # select_cargas.sql busca o valor da carga com uma subconsulta correlacionada
+    # em SE1070 (nota fiscal), casando filial/série/número/cliente/loja — não é
+    # DAK_VALOR. ISNULL(...,0) na query original == coalesce(...,0) aqui.
+    #
+    # NOTA: já tentamos trocar esta subconsulta por um LEFT JOIN único (supondo
+    # que seria mais rápido para relatórios de vários dias), mas a mudança
+    # piorou a performance real no SQL Server — provável indício de que
+    # SE1070 tem índice em (E1_FILIAL, E1_PREFIXO, E1_NUM, ...) que permite ao
+    # otimizador resolver a subconsulta correlacionada como um INDEX SEEK por
+    # linha (rápido), enquanto o LEFT JOIN forçou um plano de hash/merge join
+    # varrendo bem mais de SE1070 do que o necessário. Revertido para a forma
+    # original; não mexer nisso de novo sem antes conferir o plano de
+    # execução real (SSMS "Actual Execution Plan" ou SET STATISTICS IO/TIME)
+    # e os índices existentes em SE1070.
+    valor_nota_fiscal = (
+        select(NotaFiscalSaida.valor)
+        .where(
+            NotaFiscalSaida.deletado != "*",
+            NotaFiscalSaida.filial == ItemCarga.filial,
+            NotaFiscalSaida.prefixo == ItemCarga.serie,
+            NotaFiscalSaida.numero == ItemCarga.nota_fiscal,
+            NotaFiscalSaida.cliente == ItemCarga.cliente,
+            NotaFiscalSaida.loja == ItemCarga.loja,
+        )
+        .correlate(ItemCarga)
+        .scalar_subquery()
+    )
+    valor_coluna = func.coalesce(valor_nota_fiscal, 0)
+
     query = (
         db.query(
             ItemCarga.filial,
@@ -70,7 +88,7 @@ def _query_cargas(
             VeiculoCarga.caminhao,
             VeiculoCarga.status,
             Cliente.nome,
-            func.coalesce(NotaFiscalSaida.valor, 0),
+            valor_coluna,
         )
         .join(
             VeiculoCarga,
@@ -88,17 +106,6 @@ def _query_cargas(
                 Cliente.filial == ItemCarga.filial,
                 Cliente.codigo == ItemCarga.cliente,
                 Cliente.loja == ItemCarga.loja,
-            ),
-        )
-        .outerjoin(
-            NotaFiscalSaida,
-            and_(
-                NotaFiscalSaida.deletado != "*",
-                NotaFiscalSaida.filial == ItemCarga.filial,
-                NotaFiscalSaida.prefixo == ItemCarga.serie,
-                NotaFiscalSaida.numero == ItemCarga.nota_fiscal,
-                NotaFiscalSaida.cliente == ItemCarga.cliente,
-                NotaFiscalSaida.loja == ItemCarga.loja,
             ),
         )
         .filter(
