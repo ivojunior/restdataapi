@@ -2,7 +2,7 @@ import enum
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, Query
@@ -170,7 +170,18 @@ def _query_cargas(
     if status == StatusCargaFiltro.encerrada:
         query = query.filter(VeiculoCarga.status.in_(_STATUS_CARGA_FECHADOS))
     elif status == StatusCargaFiltro.aberta:
-        query = query.filter(VeiculoCarga.status.notin_(_STATUS_CARGA_FECHADOS))
+        # VeiculoCarga.status.notin_(...) sozinho tem o problema clássico do
+        # NOT IN com NULL em SQL: se DAK_ACECAR for NULL, "NULL NOT IN (...)"
+        # nunca é verdadeiro (lógica de três valores) — a carga some tanto do
+        # filtro "aberta" quanto do "encerrada", mesmo sem estar em ('7','8').
+        # O case() de status_coluna acima já trata NULL como "Aberta" (cai no
+        # else_); aqui replicamos a mesma regra explicitamente com is_(None).
+        query = query.filter(
+            or_(
+                VeiculoCarga.status.is_(None),
+                VeiculoCarga.status.notin_(_STATUS_CARGA_FECHADOS),
+            )
+        )
     return query
 
 

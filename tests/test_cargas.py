@@ -206,6 +206,24 @@ def test_filtro_status_aberta_agrupa_demais_codigos(client, auth_headers, db_ses
     assert {item["codigo"] for item in dados["items"]} == {"000001", "000002"}
 
 
+def test_filtro_aberta_inclui_status_nulo(client, auth_headers, db_session):
+    # VeiculoCarga.status.notin_(("7","8")) sozinho nunca é verdadeiro quando
+    # a coluna é NULL (lógica de três valores do SQL) — sem o or_(is_(None)),
+    # essa carga sumiria tanto de "aberta" quanto de "encerrada", mesmo não
+    # estando em ('7','8'). status_carga (case()) já classifica NULL como
+    # "Aberta"; o filtro precisa ser consistente com isso.
+    db_session.add_all([_cliente(), _veiculo(status=None), _item(), _percurso()])
+    db_session.commit()
+
+    resposta = client.get("/cargas/?status=aberta", headers=auth_headers)
+    dados = resposta.json()
+    assert len(dados["items"]) == 1
+    assert dados["items"][0]["status_carga"] == "Aberta"
+
+    resposta_encerrada = client.get("/cargas/?status=encerrada", headers=auth_headers)
+    assert len(resposta_encerrada.json()["items"]) == 0
+
+
 def test_filtro_status_invalido_retorna_422(client, auth_headers):
     resposta = client.get("/cargas/?status=fechada", headers=auth_headers)
     assert resposta.status_code == 422
