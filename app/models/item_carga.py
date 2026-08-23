@@ -23,7 +23,7 @@ class ItemCarga(Base):
     data = Column("DAI_DATA", String(8))
     pedido = Column("DAI_PEDIDO", String(6))
     cliente = Column("DAI_CLIENT", String(6))
-    loja = Column("DAI_LOJA", String(3))
+    loja = Column("DAI_LOJA", String(2))
     peso = Column("DAI_PESO", Numeric(18, 4))
     nota_fiscal = Column("DAI_NFISCA", String(9))
     serie = Column("DAI_SERIE", String(3))

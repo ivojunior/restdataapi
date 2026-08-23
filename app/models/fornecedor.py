@@ -17,7 +17,7 @@ class Fornecedor(Base):
 
     filial = Column("A2_FILIAL", String(2))
     codigo = Column("A2_COD", String(6))
-    loja = Column("A2_LOJA", String(3))
+    loja = Column("A2_LOJA", String(2))
     nome = Column("A2_NOME", String(40))
     nome_reduzido = Column("A2_NREDUZ", String(20))
     cnpj_cpf = Column("A2_CGC", String(20))

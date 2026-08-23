@@ -23,7 +23,7 @@ class TituloPagar(Base):
     parcela = Column("E2_PARCELA", String(3))
     tipo = Column("E2_TIPO", String(3))
     fornecedor = Column("E2_FORNECE", String(6))
-    loja = Column("E2_LOJA", String(3))
+    loja = Column("E2_LOJA", String(2))
     emissao = Column("E2_EMISSAO", String(8))
     vencimento_original = Column("E2_VENCORI", String(8))
     vencimento = Column("E2_VENCTO", String(8))
