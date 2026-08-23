@@ -119,13 +119,6 @@ def listar_financeiro(
 ):
     data_de = vencimento_de or date.today().strftime("%Y%m%d")
     query = _query_financeiro(db, data_de, vencimento_ate, status)
-    # Ver comentário equivalente em app/crud/base.py: with_entities evita que
-    # o count() embrulhe a query original (com os joins em Fornecedor/
-    # TipoOperacao) numa subquery desnecessária.
-    total = query.with_entities(func.count()).order_by(None).scalar()
-    # order_by aplicado apenas aqui (após o count()): o MSSQL exige ORDER BY
-    # junto de OFFSET/LIMIT, mas não aceita ORDER BY dentro da subquery que o
-    # SQLAlchemy gera para count() quando não há TOP/OFFSET nela.
     linhas = query.order_by(TituloPagar.rec_no).offset(skip).limit(limit).all()
 
     items = []
@@ -134,4 +127,4 @@ def listar_financeiro(
         item.descricao_operacao = descricao_operacao
         items.append(item)
 
-    return {"total": total, "skip": skip, "limit": limit, "items": items}
+    return {"skip": skip, "limit": limit, "items": items}

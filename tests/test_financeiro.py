@@ -63,7 +63,7 @@ def test_lista_com_join_de_fornecedor_e_tipo_operacao(client, auth_headers, db_s
     resposta = client.get("/financeiro/", headers=auth_headers)
     assert resposta.status_code == 200
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     item = dados["items"][0]
     assert item["numero"] == "000001"
     assert item["nome_fornecedor"] == "Fornecedor Exemplo Ltda"
@@ -94,7 +94,7 @@ def test_titulo_sem_tipo_operacao_correspondente_ainda_aparece(client, auth_head
 
     resposta = client.get("/financeiro/", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["descricao_operacao"] is None
 
 
@@ -103,7 +103,7 @@ def test_titulo_sem_fornecedor_correspondente_e_ignorado(client, auth_headers, d
     db_session.commit()
 
     resposta = client.get("/financeiro/", headers=auth_headers)
-    assert resposta.json()["total"] == 0
+    assert len(resposta.json()["items"]) == 0
 
 
 def test_tipos_excluidos_sao_ignorados(client, auth_headers, db_session):
@@ -120,7 +120,7 @@ def test_tipos_excluidos_sao_ignorados(client, auth_headers, db_session):
 
     resposta = client.get("/financeiro/", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["numero"] == "000001"
 
 
@@ -135,7 +135,7 @@ def test_sem_filtro_ignora_vencimento_anterior_a_hoje(client, auth_headers, db_s
     db_session.commit()
 
     resposta = client.get("/financeiro/", headers=auth_headers)
-    assert resposta.json()["total"] == 0
+    assert len(resposta.json()["items"]) == 0
 
 
 def test_filtro_vencimento_de_via_query_string(client, auth_headers, db_session):
@@ -152,11 +152,11 @@ def test_filtro_vencimento_de_via_query_string(client, auth_headers, db_session)
 
     resposta = client.get(f"/financeiro/?vencimento_de={ontem}", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 2
+    assert len(dados["items"]) == 2
 
     resposta = client.get(f"/financeiro/?vencimento_de={hoje}", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["numero"] == "000002"
 
 
@@ -175,7 +175,7 @@ def test_filtro_vencimento_ate_via_query_string(client, auth_headers, db_session
     resposta = client.get(
         f"/financeiro/?vencimento_de={hoje}&vencimento_ate={hoje}", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["numero"] == "000001"
 
 
@@ -192,7 +192,7 @@ def test_filtro_status_baixado_via_query_string(client, auth_headers, db_session
 
     resposta = client.get("/financeiro/?status=baixado", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["numero"] == "000001"
 
 
@@ -207,10 +207,10 @@ def test_filtro_status_baixado_ignora_data_baixa_so_com_espacos(client, auth_hea
     db_session.commit()
 
     resposta = client.get("/financeiro/?status=baixado", headers=auth_headers)
-    assert resposta.json()["total"] == 0
+    assert len(resposta.json()["items"]) == 0
 
     resposta = client.get("/financeiro/?status=em_aberto", headers=auth_headers)
-    assert resposta.json()["total"] == 1
+    assert len(resposta.json()["items"]) == 1
 
 
 def test_filtro_status_em_aberto_via_query_string(client, auth_headers, db_session):
@@ -226,7 +226,7 @@ def test_filtro_status_em_aberto_via_query_string(client, auth_headers, db_sessi
 
     resposta = client.get("/financeiro/?status=em_aberto", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["numero"] == "000001"
 
 
@@ -247,7 +247,7 @@ def test_filtro_status_vencido_via_query_string(client, auth_headers, db_session
     resposta = client.get(
         f"/financeiro/?vencimento_de={ontem}&status=vencido", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["numero"] == "000001"
 
 

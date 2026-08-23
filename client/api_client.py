@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 import requests
 
@@ -48,8 +48,8 @@ class APIClient:
         vencimento_de: Optional[str] = None,
         vencimento_ate: Optional[str] = None,
         status: Optional[str] = None,
-        progress_callback: Optional[Callable[[int, int], None]] = None,
-    ) -> Tuple[List[Dict], int]:
+        progress_callback: Optional[Callable[[int], None]] = None,
+    ) -> List[Dict]:
         """Busca todas as páginas do relatório financeiro.
 
         O endpoint /financeiro exclui sempre os tipos de título PA/PR/NDF
@@ -60,6 +60,11 @@ class APIClient:
         calculado nos clients desktop. Qualquer outro filtro (filial,
         fornecedor, tipo etc.) é aplicado no cliente, após o carregamento
         completo dos dados.
+
+        A API não devolve mais o total de registros (um count(*) exato sobre
+        os mesmos joins/filtros da consulta é caro demais para calcular a
+        cada página — ver README). O carregamento completo continua
+        funcionando normalmente: para assim que uma página vier vazia.
         """
         all_items: List[Dict] = []
         skip = 0
@@ -70,17 +75,16 @@ class APIClient:
                 skip=skip, limit=limit, vencimento_de=vencimento_de,
                 vencimento_ate=vencimento_ate, status=status)
             items = result["items"]
-            total = result["total"]
             all_items.extend(items)
             skip += len(items)
 
             if progress_callback:
-                progress_callback(len(all_items), total)
+                progress_callback(len(all_items))
 
-            if skip >= total or not items:
+            if not items:
                 break
 
-        return all_items, total
+        return all_items
 
     def get_cargas_page(
         self,
@@ -104,8 +108,8 @@ class APIClient:
         data_inicial: Optional[str] = None,
         data_final: Optional[str] = None,
         status: Optional[str] = None,
-        progress_callback: Optional[Callable[[int, int], None]] = None,
-    ) -> Tuple[List[Dict], int]:
+        progress_callback: Optional[Callable[[int], None]] = None,
+    ) -> List[Dict]:
         """Busca todas as páginas do relatório de cargas.
 
         O endpoint /cargas aplica sempre como regra fixa apenas itens não
@@ -117,6 +121,11 @@ class APIClient:
         em apenas esses 2 tipos pela própria API. Qualquer outro filtro
         (filial, cliente, caminhão etc.) é aplicado no cliente, após o
         carregamento completo dos dados.
+
+        A API não devolve mais o total de registros (um count(*) exato sobre
+        os mesmos joins/filtros da consulta é caro demais para calcular a
+        cada página — ver README). O carregamento completo continua
+        funcionando normalmente: para assim que uma página vier vazia.
         """
         all_items: List[Dict] = []
         skip = 0
@@ -127,17 +136,16 @@ class APIClient:
                 skip=skip, limit=limit, data_inicial=data_inicial,
                 data_final=data_final, status=status)
             items = result["items"]
-            total = result["total"]
             all_items.extend(items)
             skip += len(items)
 
             if progress_callback:
-                progress_callback(len(all_items), total)
+                progress_callback(len(all_items))
 
-            if skip >= total or not items:
+            if not items:
                 break
 
-        return all_items, total
+        return all_items
 
     def get_saldos_estoque_page(
         self,
@@ -157,8 +165,8 @@ class APIClient:
         self,
         tipo_produto: Optional[str] = None,
         local: Optional[str] = None,
-        progress_callback: Optional[Callable[[int, int], None]] = None,
-    ) -> Tuple[List[Dict], int]:
+        progress_callback: Optional[Callable[[int], None]] = None,
+    ) -> List[Dict]:
         """Busca todas as páginas do relatório de saldo de estoque.
 
         O endpoint /saldos-estoque aplica sempre como regra fixa apenas saldo
@@ -167,6 +175,11 @@ class APIClient:
         recorte de estoque consultar. Qualquer outro filtro (filial, código,
         descrição etc.) é aplicado no cliente, após o carregamento completo
         dos dados.
+
+        A API não devolve mais o total de registros (um count(*) exato sobre
+        os mesmos joins/filtros da consulta é caro demais para calcular a
+        cada página — ver README). O carregamento completo continua
+        funcionando normalmente: para assim que uma página vier vazia.
         """
         all_items: List[Dict] = []
         skip = 0
@@ -176,14 +189,13 @@ class APIClient:
             result = self.get_saldos_estoque_page(
                 skip=skip, limit=limit, tipo_produto=tipo_produto, local=local)
             items = result["items"]
-            total = result["total"]
             all_items.extend(items)
             skip += len(items)
 
             if progress_callback:
-                progress_callback(len(all_items), total)
+                progress_callback(len(all_items))
 
-            if skip >= total or not items:
+            if not items:
                 break
 
-        return all_items, total
+        return all_items

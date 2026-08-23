@@ -44,8 +44,8 @@ def listar_produtos(
         filters["codigo"] = codigo
     if grupo:
         filters["grupo"] = grupo
-    items, total = crud_produto.list(db, skip, limit, order_by, filters)
-    return {"total": total, "skip": skip, "limit": limit, "items": items}
+    items = crud_produto.list(db, skip, limit, order_by, filters)
+    return {"skip": skip, "limit": limit, "items": items}
 
 
 @router.get("/{rec_no}", response_model=ProdutoRead)

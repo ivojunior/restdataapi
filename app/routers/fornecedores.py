@@ -47,8 +47,8 @@ def listar_fornecedores(
         filters["cnpj_cpf"] = cnpj_cpf
     if nome:
         filters["nome"] = nome
-    items, total = crud_fornecedor.list(db, skip, limit, order_by, filters)
-    return {"total": total, "skip": skip, "limit": limit, "items": items}
+    items = crud_fornecedor.list(db, skip, limit, order_by, filters)
+    return {"skip": skip, "limit": limit, "items": items}
 
 
 @router.get("/{rec_no}", response_model=FornecedorRead)

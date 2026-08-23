@@ -162,15 +162,6 @@ def listar_cargas(
 ):
     data_filtro = data_inicial or date.today().strftime("%Y%m%d")
     query = _query_cargas(db, data_filtro, data_final, status)
-    # Não usar query.count(): ele envolve a query inteira (incluindo a
-    # subquery correlacionada de valor_nota_fiscal) numa subquery só para
-    # contar linhas — o banco acaba reavaliando essa subquery por linha à toa.
-    # with_entities troca a lista de colunas por count(*), mantendo os
-    # mesmos joins/filtros mas sem a subquery de valor.
-    total = query.with_entities(func.count()).order_by(None).scalar()
-    # order_by aplicado apenas aqui (após o count()): o MSSQL exige ORDER BY
-    # junto de OFFSET/LIMIT, mas não aceita ORDER BY dentro da subquery que o
-    # SQLAlchemy gera para count() quando não há TOP/OFFSET nela.
     linhas = (
         query.order_by(ItemCarga.filial, ItemCarga.codigo, ItemCarga.sequencia_carga)
         .offset(skip)
@@ -198,4 +189,4 @@ def listar_cargas(
         ) in linhas
     ]
 
-    return {"total": total, "skip": skip, "limit": limit, "items": items}
+    return {"skip": skip, "limit": limit, "items": items}

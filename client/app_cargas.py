@@ -488,24 +488,26 @@ class CargasApp:
     def _fetch_thread(self, data_inicial: str, data_final: str, status: Optional[str]) -> None:
         try:
             client = self._make_client()
-            items, total = client.get_all_cargas(
+            items = client.get_all_cargas(
                 data_inicial=data_inicial, data_final=data_final, status=status,
                 progress_callback=self._on_progress)
-            self.root.after(0, self._on_data_ready, items, total)
+            self.root.after(0, self._on_data_ready, items)
         except Exception as exc:
             self.root.after(0, self._on_error, str(exc))
 
-    def _on_progress(self, loaded: int, total: int) -> None:
-        pct = int(100 * loaded / total) if total else 0
-        self.root.after(0, self._update_progress_bar, loaded, total, pct)
+    def _on_progress(self, loaded: int) -> None:
+        self.root.after(0, self._update_progress_bar, loaded)
 
-    def _update_progress_bar(self, loaded: int, total: int, pct: int) -> None:
-        self._progress.stop()
-        self._progress.configure(mode="determinate", value=pct)
-        self._pct_var.set(f"{pct}%  ({loaded}/{total})")
-        self._status_var.set(f"Carregando… {loaded} de {total} registros")
+    def _update_progress_bar(self, loaded: int) -> None:
+        # A API não expõe mais o total de registros por página (um count()
+        # exato sobre os mesmos joins/filtros da consulta é caro demais para
+        # calcular a cada página — ver README): a barra fica indeterminada
+        # (giratória, iniciada em _set_status) durante o carregamento; só o
+        # contador de registros já lidos é atualizado.
+        self._pct_var.set(f"{loaded} registro(s)")
+        self._status_var.set(f"Carregando… {loaded} registro(s)")
 
-    def _on_data_ready(self, items: List[Dict], total_api: int) -> None:
+    def _on_data_ready(self, items: List[Dict]) -> None:
         self._loading = False
 
         df = pd.DataFrame(items) if items else pd.DataFrame()
@@ -521,9 +523,10 @@ class CargasApp:
 
         n = _n_cargas(self._df)
         self._set_status(
-            f"{n} carga(s) distinta(s) exibida(s)  [{total_api} item(ns) carregado(s) da API]"
+            f"{n} carga(s) distinta(s) exibida(s)  [{len(items)} item(ns) carregado(s) da API]"
         )
-        self._progress["value"] = 100
+        self._progress.stop()
+        self._progress.configure(mode="determinate", value=100)
         self._pct_var.set("100%")
 
     def _on_error(self, msg: str) -> None:

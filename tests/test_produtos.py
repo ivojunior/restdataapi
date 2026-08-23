@@ -32,7 +32,7 @@ def test_listar_e_obter_produto(client, auth_headers, db_session):
 
     resposta_lista = client.get("/produtos/", headers=auth_headers)
     assert resposta_lista.status_code == 200
-    assert resposta_lista.json()["total"] == 1
+    assert len(resposta_lista.json()["items"]) == 1
 
     resposta = client.get(f"/produtos/{produto.rec_no}", headers=auth_headers)
     assert resposta.status_code == 200
@@ -50,7 +50,7 @@ def test_produtos_deletados_sao_ignorados(client, auth_headers, db_session):
 
     resposta = client.get("/produtos/", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["codigo"] == "PROD001"
 
 
@@ -65,7 +65,7 @@ def test_filtro_por_grupo(client, auth_headers, db_session):
 
     resposta = client.get("/produtos/?grupo=0002", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["codigo"] == "PROD002"
 
 

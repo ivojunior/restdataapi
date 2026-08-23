@@ -47,8 +47,8 @@ def listar_titulos_pagar(
         filters["prefixo"] = prefixo
     if numero:
         filters["numero"] = numero
-    items, total = crud_titulo_pagar.list(db, skip, limit, order_by, filters)
-    return {"total": total, "skip": skip, "limit": limit, "items": items}
+    items = crud_titulo_pagar.list(db, skip, limit, order_by, filters)
+    return {"skip": skip, "limit": limit, "items": items}
 
 
 @router.get("/{rec_no}", response_model=TituloPagarRead)

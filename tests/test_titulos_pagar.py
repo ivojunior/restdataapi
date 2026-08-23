@@ -38,7 +38,7 @@ def test_listar_e_obter_titulo(client, auth_headers, db_session):
 
     resposta_lista = client.get("/titulos-pagar/", headers=auth_headers)
     assert resposta_lista.status_code == 200
-    assert resposta_lista.json()["total"] == 1
+    assert len(resposta_lista.json()["items"]) == 1
 
     resposta = client.get(f"/titulos-pagar/{titulo.rec_no}", headers=auth_headers)
     assert resposta.status_code == 200
@@ -58,7 +58,7 @@ def test_titulos_deletados_sao_ignorados(client, auth_headers, db_session):
 
     resposta = client.get("/titulos-pagar/", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["numero"] == "000001"
 
 
@@ -83,7 +83,7 @@ def test_filtro_por_fornecedor(client, auth_headers, db_session):
 
     resposta = client.get("/titulos-pagar/?fornecedor=000456", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["fornecedor"] == "000456"
 
 

@@ -79,7 +79,7 @@ def test_lista_com_join_de_veiculo_e_cliente(client, auth_headers, db_session):
     resposta = client.get("/cargas/", headers=auth_headers)
     assert resposta.status_code == 200
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     item = dados["items"][0]
     assert item["codigo"] == "000001"
     assert item["nome_cliente"] == "Cliente Exemplo Ltda"
@@ -104,7 +104,7 @@ def test_valor_vem_da_nota_fiscal_nao_do_veiculo(client, auth_headers, db_sessio
 
     resposta = client.get("/cargas/", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["valor"] == "777.77"
 
 
@@ -114,7 +114,7 @@ def test_valor_e_zero_sem_nota_fiscal_correspondente(client, auth_headers, db_se
 
     resposta = client.get("/cargas/", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["valor"] == "0.00"
 
 
@@ -134,7 +134,7 @@ def test_filtro_status_encerrada_agrupa_codigos_7_e_8(client, auth_headers, db_s
 
     resposta = client.get("/cargas/?status=encerrada", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 2
+    assert len(dados["items"]) == 2
     assert {item["codigo"] for item in dados["items"]} == {"000002", "000003"}
 
 
@@ -154,7 +154,7 @@ def test_filtro_status_aberta_agrupa_demais_codigos(client, auth_headers, db_ses
 
     resposta = client.get("/cargas/?status=aberta", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 2
+    assert len(dados["items"]) == 2
     assert {item["codigo"] for item in dados["items"]} == {"000001", "000002"}
 
 
@@ -178,7 +178,7 @@ def test_filtro_data_final_via_query_string(client, auth_headers, db_session):
     resposta = client.get(
         "/cargas/?data_inicial=20260801&data_final=20260810", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["codigo"] == "000001"
 
 
@@ -187,7 +187,7 @@ def test_item_sem_veiculo_correspondente_e_ignorado(client, auth_headers, db_ses
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
-    assert resposta.json()["total"] == 0
+    assert len(resposta.json()["items"]) == 0
 
 
 def test_item_sem_cliente_correspondente_e_ignorado(client, auth_headers, db_session):
@@ -195,7 +195,7 @@ def test_item_sem_cliente_correspondente_e_ignorado(client, auth_headers, db_ses
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
-    assert resposta.json()["total"] == 0
+    assert len(resposta.json()["items"]) == 0
 
 
 def test_sequencia_cancelada_e_ignorada(client, auth_headers, db_session):
@@ -203,7 +203,7 @@ def test_sequencia_cancelada_e_ignorada(client, auth_headers, db_session):
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
-    assert resposta.json()["total"] == 0
+    assert len(resposta.json()["items"]) == 0
 
 
 def test_registros_deletados_sao_ignorados(client, auth_headers, db_session):
@@ -211,7 +211,7 @@ def test_registros_deletados_sao_ignorados(client, auth_headers, db_session):
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
-    assert resposta.json()["total"] == 0
+    assert len(resposta.json()["items"]) == 0
 
 
 def test_sem_filtro_assume_data_atual(client, auth_headers, db_session):
@@ -230,7 +230,7 @@ def test_sem_filtro_assume_data_atual(client, auth_headers, db_session):
 
     resposta = client.get("/cargas/", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["codigo"] == "000002"
 
 
@@ -248,7 +248,7 @@ def test_filtro_data_inicial_via_query_string(client, auth_headers, db_session):
 
     resposta = client.get("/cargas/?data_inicial=20260801", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["codigo"] == "000002"
 
 

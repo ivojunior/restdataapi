@@ -31,7 +31,7 @@ def test_listar_e_obter_fornecedor(client, auth_headers, db_session):
 
     resposta_lista = client.get("/fornecedores/", headers=auth_headers)
     assert resposta_lista.status_code == 200
-    assert resposta_lista.json()["total"] == 1
+    assert len(resposta_lista.json()["items"]) == 1
 
     resposta = client.get(f"/fornecedores/{fornecedor.rec_no}", headers=auth_headers)
     assert resposta.status_code == 200
@@ -49,7 +49,7 @@ def test_fornecedores_deletados_sao_ignorados(client, auth_headers, db_session):
 
     resposta = client.get("/fornecedores/", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["codigo"] == "000123"
 
 
@@ -64,7 +64,7 @@ def test_filtro_por_cnpj_cpf(client, auth_headers, db_session):
 
     resposta = client.get("/fornecedores/?cnpj_cpf=22222222000192", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["codigo"] == "000456"
 
 

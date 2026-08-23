@@ -388,24 +388,26 @@ class EstoqueApp:
         try:
             client = self._make_client()
             tipo_produto, local = TIPO_ESTOQUE_OPCOES[self._tipo_estoque_var.get()]
-            items, total = client.get_all_saldos_estoque(
+            items = client.get_all_saldos_estoque(
                 tipo_produto=tipo_produto, local=local,
                 progress_callback=self._on_progress)
-            self.root.after(0, self._on_data_ready, items, total)
+            self.root.after(0, self._on_data_ready, items)
         except Exception as exc:
             self.root.after(0, self._on_error, str(exc))
 
-    def _on_progress(self, loaded: int, total: int) -> None:
-        pct = int(100 * loaded / total) if total else 0
-        self.root.after(0, self._update_progress_bar, loaded, total, pct)
+    def _on_progress(self, loaded: int) -> None:
+        self.root.after(0, self._update_progress_bar, loaded)
 
-    def _update_progress_bar(self, loaded: int, total: int, pct: int) -> None:
-        self._progress.stop()
-        self._progress.configure(mode="determinate", value=pct)
-        self._pct_var.set(f"{pct}%  ({loaded}/{total})")
-        self._status_var.set(f"Carregando… {loaded} de {total} registros")
+    def _update_progress_bar(self, loaded: int) -> None:
+        # A API não expõe mais o total de registros por página (um count()
+        # exato sobre os mesmos joins/filtros da consulta é caro demais para
+        # calcular a cada página — ver README): a barra fica indeterminada
+        # (giratória, iniciada em _set_status) durante o carregamento; só o
+        # contador de registros já lidos é atualizado.
+        self._pct_var.set(f"{loaded} registro(s)")
+        self._status_var.set(f"Carregando… {loaded} registro(s)")
 
-    def _on_data_ready(self, items: List[Dict], total_api: int) -> None:
+    def _on_data_ready(self, items: List[Dict]) -> None:
         self._loading = False
 
         df = pd.DataFrame(items) if items else pd.DataFrame()
@@ -417,11 +419,13 @@ class EstoqueApp:
         self._apply_filters_and_refresh()
 
         n = len(self._df) if self._df is not None else 0
+        total_api = len(items)
         self._set_status(
             f"{n} item(ns) exibido(s) — {self._tipo_estoque_var.get()}"
             + (f"  [total carregado da API: {total_api}]" if n != total_api else "")
         )
-        self._progress["value"] = 100
+        self._progress.stop()
+        self._progress.configure(mode="determinate", value=100)
         self._pct_var.set("100%")
 
     def _on_error(self, msg: str) -> None:

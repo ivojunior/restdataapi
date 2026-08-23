@@ -128,6 +128,8 @@ Todos os endpoints são `GET` — não existem rotas `POST`, `PUT` ou `DELETE`.
 
 Parâmetros comuns de listagem: `skip`, `limit` (paginação), `order_by` (ex.: `nome` ou `-criado_em` para ordem decrescente) e filtros por campo (ex.: `?filial=01`).
 
+A resposta paginada (`{"skip", "limit", "items"}`) não inclui um total de registros. Um `count(*)` exato sobre os mesmos `JOIN`s/filtros da listagem não consegue parar cedo como o `SELECT` paginado (que usa `ORDER BY` + `OFFSET`/`FETCH` e para assim que preenche a página) — precisa avaliar todas as linhas que casam nos joins até o fim. Em tabelas grandes do Protheus isso chegou a levar o `count()` sozinho a mais de 45s mesmo com a página respondendo em ~1s, por isso foi removido. Para consumir o relatório inteiro, pagine em loop incrementando `skip` até receber uma página com `items` vazio (é o que `client/api_client.py` já faz).
+
 ### `/financeiro/`
 
 Baseado no `SELECT` de `select_financeiro.sql`: junta `SE2070` (títulos a pagar) com `SA2070` (fornecedor, join obrigatório — títulos sem fornecedor cadastrado na filial `"  "` não aparecem) e `PA6000` (tipo de operação, join opcional — `descricao_operacao` vem `null` quando não há correspondência). Aplica como regra de negócio fixa (sempre ativa):

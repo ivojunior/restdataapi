@@ -41,7 +41,7 @@ def test_lista_com_join_de_produto_e_conversao(client, auth_headers, db_session)
     resposta = client.get("/saldos-estoque/", headers=auth_headers)
     assert resposta.status_code == 200
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     item = dados["items"][0]
     assert item["codigo_produto"] == "PROD001"
     assert item["descricao_produto"] == "Produto Exemplo"
@@ -65,7 +65,7 @@ def test_saldo_sem_produto_correspondente_e_ignorado(client, auth_headers, db_se
     db_session.commit()
 
     resposta = client.get("/saldos-estoque/", headers=auth_headers)
-    assert resposta.json()["total"] == 0
+    assert len(resposta.json()["items"]) == 0
 
 
 def test_sem_filtro_de_tipo_ou_local_traz_qualquer_combinacao(client, auth_headers, db_session):
@@ -78,7 +78,7 @@ def test_sem_filtro_de_tipo_ou_local_traz_qualquer_combinacao(client, auth_heade
     db_session.commit()
 
     resposta = client.get("/saldos-estoque/", headers=auth_headers)
-    assert resposta.json()["total"] == 2
+    assert len(resposta.json()["items"]) == 2
 
 
 def test_filtro_tipo_produto_via_query_string(client, auth_headers, db_session):
@@ -92,7 +92,7 @@ def test_filtro_tipo_produto_via_query_string(client, auth_headers, db_session):
 
     resposta = client.get("/saldos-estoque/?tipo_produto=AM", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["codigo_produto"] == "PROD002"
 
 
@@ -107,7 +107,7 @@ def test_filtro_local_via_query_string(client, auth_headers, db_session):
 
     resposta = client.get("/saldos-estoque/?local=20", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["codigo_produto"] == "PROD002"
 
 
@@ -125,7 +125,7 @@ def test_filtro_tipo_e_local_combinados(client, auth_headers, db_session):
     resposta = client.get(
         "/saldos-estoque/?tipo_produto=AM&local=20", headers=auth_headers)
     dados = resposta.json()
-    assert dados["total"] == 1
+    assert len(dados["items"]) == 1
     assert dados["items"][0]["codigo_produto"] == "PROD002"
 
 
@@ -137,7 +137,7 @@ def test_saldo_zerado_ou_negativo_e_ignorado(client, auth_headers, db_session):
     db_session.commit()
 
     resposta = client.get("/saldos-estoque/", headers=auth_headers)
-    assert resposta.json()["total"] == 0
+    assert len(resposta.json()["items"]) == 0
 
 
 def test_registros_deletados_sao_ignorados(client, auth_headers, db_session):
@@ -149,7 +149,7 @@ def test_registros_deletados_sao_ignorados(client, auth_headers, db_session):
     db_session.commit()
 
     resposta = client.get("/saldos-estoque/", headers=auth_headers)
-    assert resposta.json()["total"] == 1
+    assert len(resposta.json()["items"]) == 1
 
 
 def test_metodos_de_escrita_nao_existem(client, auth_headers):
