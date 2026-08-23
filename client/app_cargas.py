@@ -73,9 +73,9 @@ TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
     ("filial",             "Filial",      55,  "c"),
     ("codigo",              "Carga",       75,  "c"),
     ("data",                "Data",        85,  "c"),
-    ("percurso",            "Percurso",    70,  "c"),
-    ("descricao_percurso",  "Descrição do Percurso", 160, "w"),
+    ("descricao_percurso",  "Percurso",    160, "w"),
     ("pedido",              "Pedido",      80,  "c"),
+    ("motorista",           "Motorista",  150,  "w"),
     ("nome_cliente",        "Cliente",    220,  "w"),
     ("nota_fiscal",         "Nota Fiscal", 90,  "c"),
     ("caminhao",            "Caminhão",    90,  "c"),
@@ -106,6 +106,13 @@ def _fmt_date(s) -> str:
     if len(s) == 8 and s.isdigit():
         return f"{s[6:8]}/{s[4:6]}/{s[:4]}"
     return s or "—"
+
+
+def _or_dash(v) -> str:
+    """descricao_percurso, motorista e status_carga podem vir None da API
+    (LEFT JOIN/CASE sem ELSE — ver app/routers/cargas.py); sem isso, o
+    Treeview do Tkinter mostraria o texto literal "None" na célula."""
+    return str(v) if v not in (None, "") else "—"
 
 
 def _fmt_cliente_label(codigo, nome) -> str:
@@ -731,13 +738,13 @@ class CargasApp:
                 row.filial,
                 row.codigo,
                 _fmt_date(row.data),
-                row.percurso,
-                row.descricao_percurso,
+                _or_dash(row.descricao_percurso),
                 row.pedido,
+                _or_dash(row.motorista),
                 row.nome_cliente,
                 row.nota_fiscal,
                 row.caminhao,
-                row.status_carga,
+                _or_dash(row.status_carga),
                 _peso(row.peso),
                 _brl(row.valor),
             ))
@@ -858,9 +865,9 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Filial",        "filial",        9),
         ("Carga",         "codigo",       12),
         ("Data",          "data",         13),
-        ("Percurso",      "percurso",     12),
-        ("Descrição do Percurso", "descricao_percurso", 30),
+        ("Percurso",      "descricao_percurso", 30),
         ("Pedido",        "pedido",       13),
+        ("Motorista",     "motorista",    26),
         ("Cliente",       "nome_cliente", 34),
         ("Nota Fiscal",   "nota_fiscal",  14),
         ("Caminhão",      "caminhao",     14),
