@@ -64,12 +64,16 @@ def _query_cargas(
     valor_nota_fiscal = (
         select(NotaFiscalSaida.valor)
         .where(
-            NotaFiscalSaida.deletado != "*",
             NotaFiscalSaida.filial == ItemCarga.filial,
-            NotaFiscalSaida.prefixo == ItemCarga.serie,
-            NotaFiscalSaida.numero == ItemCarga.nota_fiscal,
             NotaFiscalSaida.cliente == ItemCarga.cliente,
             NotaFiscalSaida.loja == ItemCarga.loja,
+            NotaFiscalSaida.prefixo == ItemCarga.serie,
+            NotaFiscalSaida.numero == ItemCarga.nota_fiscal,
+            NotaFiscalSaida.parcela == '  ',
+            NotaFiscalSaida.tipo == 'NF ',
+            NotaFiscalSaida.carga == ItemCarga.codigo,
+            NotaFiscalSaida.sequencia_carga == ItemCarga.sequencia_carga,
+            NotaFiscalSaida.deletado != "*",
         )
         .correlate(ItemCarga)
         .scalar_subquery()

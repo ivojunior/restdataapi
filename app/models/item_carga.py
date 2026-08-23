@@ -18,7 +18,7 @@ class ItemCarga(Base):
 
     filial = Column("DAI_FILIAL", String(2))
     codigo = Column("DAI_COD", String(6))
-    sequencia_carga = Column("DAI_SEQCAR", String(6))
+    sequencia_carga = Column("DAI_SEQCAR", String(2))
     sequencia = Column("DAI_SEQUEN", String(6))
     data = Column("DAI_DATA", String(8))
     pedido = Column("DAI_PEDIDO", String(6))

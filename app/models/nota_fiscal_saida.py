@@ -20,7 +20,12 @@ class NotaFiscalSaida(Base):
 
     filial = Column("E1_FILIAL", String(2))
     prefixo = Column("E1_PREFIXO", String(3))
+    tipo = Column("E1_TIPO", String(3))
+    parcela = Column("E1_PARCELA", String(2))
     numero = Column("E1_NUM", String(9))
     cliente = Column("E1_CLIENTE", String(6))
     loja = Column("E1_LOJA", String(3))
     valor = Column("E1_VALOR", Numeric(18, 2))
+    carga = Column("E1_YCARGA", String(6))
+    sequencia_carga = Column("E1_YSEQCAR", String(2))
+
