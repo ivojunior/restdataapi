@@ -10,11 +10,16 @@ class CargaRead(BaseModel):
     filial: str
     codigo: str
     data: str
+    percurso: str
+    descricao_percurso: Optional[str] = None
     pedido: str
     cliente: str
     nome_cliente: Optional[str] = None
     peso: Decimal
     nota_fiscal: str
+    # Já vêm formatados pela API (case do SQL/SQLAlchemy — ver
+    # app/routers/cargas.py): "Cliente" no lugar da placa KHA0902, e
+    # "Aberta"/"Fechada" no lugar do código bruto de DAK_ACECAR.
     caminhao: str
-    status_carga: Optional[str] = None
+    status_carga: str
     valor: Decimal

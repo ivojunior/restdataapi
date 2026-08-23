@@ -2,7 +2,7 @@ import enum
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, Query
@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models.cliente import Cliente
 from app.models.item_carga import ItemCarga
 from app.models.nota_fiscal_saida import NotaFiscalSaida
+from app.models.percurso import Percurso
 from app.models.veiculo_carga import VeiculoCarga
 from app.schemas.carga import CargaRead
 from app.schemas.common import PaginatedResponse
@@ -32,10 +33,21 @@ _SEQUENCIA_CANCELADA = "999999"
 # "fechados". Qualquer outro código é considerado "aberto".
 _STATUS_CARGA_FECHADOS = ("7", "8")
 
+# Placa usada para indicar que o próprio cliente retirou a carga (sem
+# caminhão terceirizado vinculado) — select_cargas.sql substitui por
+# "Cliente" via CASE; réplica aqui (era feito no client desktop antes).
+_CAMINHAO_CLIENTE = "KHA0902"
+
 
 class StatusCargaFiltro(str, enum.Enum):
     """Classificação do status da carga (DAK_ACECAR) em apenas 2 tipos:
-    "encerrada" (códigos 7 e 8) ou "aberta" (demais códigos)."""
+    "encerrada" (códigos 7 e 8) ou "aberta" (demais códigos).
+
+    O nome do parâmetro de query ("encerrada") é mantido por
+    retrocompatibilidade; o texto de fato retornado no campo status_carga
+    (ver case() em _query_cargas) é "Fechada", igual ao CASE de
+    select_cargas.sql.
+    """
 
     aberta = "aberta"
     encerrada = "encerrada"
@@ -87,17 +99,33 @@ def _query_cargas(
     )
     valor_coluna = func.coalesce(valor_nota_fiscal, 0)
 
+    # select_cargas.sql agora calcula CAMINHAO e STATUS com CASE direto no
+    # banco (em vez de devolver os códigos brutos e formatar no client) —
+    # replicado aqui com case() do SQLAlchemy. Isso não afeta o plano de
+    # execução (não entra em JOIN/WHERE, só na lista de colunas do SELECT) e
+    # tira do client o trabalho de formatar essas duas colunas linha a linha.
+    caminhao_coluna = case(
+        (VeiculoCarga.caminhao == _CAMINHAO_CLIENTE, "Cliente"),
+        else_=VeiculoCarga.caminhao,
+    )
+    status_coluna = case(
+        (VeiculoCarga.status.in_(_STATUS_CARGA_FECHADOS), "Fechada"),
+        else_="Aberta",
+    )
+
     query = (
         db.query(
             ItemCarga.filial,
             ItemCarga.codigo,
             ItemCarga.data,
+            ItemCarga.percurso,
+            Percurso.descricao,
             ItemCarga.pedido,
             ItemCarga.cliente,
             ItemCarga.peso,
             ItemCarga.nota_fiscal,
-            VeiculoCarga.caminhao,
-            VeiculoCarga.status,
+            caminhao_coluna,
+            status_coluna,
             Cliente.nome,
             valor_coluna,
         )
@@ -117,6 +145,14 @@ def _query_cargas(
                 Cliente.filial == ItemCarga.filial,
                 Cliente.codigo == ItemCarga.cliente,
                 Cliente.loja == ItemCarga.loja,
+            ),
+        )
+        .join(
+            Percurso,
+            and_(
+                Percurso.deletado != "*",
+                Percurso.filial == ItemCarga.filial,
+                Percurso.codigo == ItemCarga.percurso,
             ),
         )
         .filter(
@@ -174,6 +210,8 @@ def listar_cargas(
             filial=filial,
             codigo=codigo,
             data=data,
+            percurso=percurso,
+            descricao_percurso=descricao_percurso,
             pedido=pedido,
             cliente=cliente,
             nome_cliente=nome_cliente,
@@ -184,8 +222,8 @@ def listar_cargas(
             valor=valor,
         )
         for (
-            filial, codigo, data, pedido, cliente, peso, nota_fiscal,
-            caminhao, status_carga, nome_cliente, valor,
+            filial, codigo, data, percurso, descricao_percurso, pedido, cliente,
+            peso, nota_fiscal, caminhao, status_carga, nome_cliente, valor,
         ) in linhas
     ]
 
