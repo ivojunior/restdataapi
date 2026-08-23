@@ -59,6 +59,10 @@ def _nota_fiscal(**overrides):
         cliente="000456",
         loja="01",
         valor="1500.00",
+        parcela="  ",
+        tipo="NF ",
+        carga="000001",
+        sequencia_carga="001",
     )
     dados.update(overrides)
     return NotaFiscalSaida(**dados)

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, Query
@@ -64,7 +64,10 @@ def listar_saldos_estoque(
     db: Session = Depends(get_db),
 ):
     query = _query_saldos_estoque(db, tipo_produto, local)
-    total = query.count()
+    # Ver comentário equivalente em app/crud/base.py: with_entities evita que
+    # o count() embrulhe a query original (com o join em Produto) numa
+    # subquery desnecessária.
+    total = query.with_entities(func.count()).order_by(None).scalar()
     # order_by aplicado apenas aqui (após o count()): o MSSQL exige ORDER BY
     # junto de OFFSET/LIMIT, mas não aceita ORDER BY dentro da subquery que o
     # SQLAlchemy gera para count() quando não há TOP/OFFSET nela.

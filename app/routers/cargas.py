@@ -51,6 +51,13 @@ def _query_cargas(
     # em SE1070 (nota fiscal), casando filial/série/número/cliente/loja — não é
     # DAK_VALOR. ISNULL(...,0) na query original == coalesce(...,0) aqui.
     #
+    # Diferente da consulta original, também restringimos parcela ('  ') e tipo
+    # ('NF ') e casamos por carga/sequência de carga (E1_YCARGA/E1_YSEQCAR,
+    # campos customizados desta instalação do Protheus) — evita que a
+    # subconsulta pegue, por engano, uma nota de outra parcela/tipo ou de outra
+    # carga que coincida em filial/série/número/cliente/loja, dando mais
+    # assertividade ao valor retornado.
+    #
     # NOTA: já tentamos trocar esta subconsulta por um LEFT JOIN único (supondo
     # que seria mais rápido para relatórios de vários dias), mas a mudança
     # piorou a performance real no SQL Server — provável indício de que
@@ -155,7 +162,12 @@ def listar_cargas(
 ):
     data_filtro = data_inicial or date.today().strftime("%Y%m%d")
     query = _query_cargas(db, data_filtro, data_final, status)
-    total = query.count()
+    # Não usar query.count(): ele envolve a query inteira (incluindo a
+    # subquery correlacionada de valor_nota_fiscal) numa subquery só para
+    # contar linhas — o banco acaba reavaliando essa subquery por linha à toa.
+    # with_entities troca a lista de colunas por count(*), mantendo os
+    # mesmos joins/filtros mas sem a subquery de valor.
+    total = query.with_entities(func.count()).order_by(None).scalar()
     # order_by aplicado apenas aqui (após o count()): o MSSQL exige ORDER BY
     # junto de OFFSET/LIMIT, mas não aceita ORDER BY dentro da subquery que o
     # SQLAlchemy gera para count() quando não há TOP/OFFSET nela.

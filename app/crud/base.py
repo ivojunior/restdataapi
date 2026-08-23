@@ -1,6 +1,6 @@
 from typing import Any, Dict, Generic, List, Optional, Tuple, Type, TypeVar
 
-from sqlalchemy import asc, desc
+from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import Session
 
 from app.database import Base
@@ -36,10 +36,12 @@ class CRUDBase(Generic[ModelType]):
         for field, value in (filters or {}).items():
             query = query.filter(getattr(self.model, field) == value)
 
-        # total é contado antes do order_by: o SQLAlchemy envolve a query em uma
-        # subquery para o count(), e o MSSQL não aceita ORDER BY em uma subquery
-        # sem TOP/OFFSET.
-        total = query.count()
+        # Não usar query.count(): ele envolve a query inteira em uma subquery
+        # (SELECT count(*) FROM (SELECT <colunas originais> FROM ...) AS anon),
+        # em vez de gerar um count(*) direto. with_entities troca só a lista de
+        # colunas, mantendo filtros/joins, e evita esse embrulho — bem mais
+        # rápido, especialmente em tabelas grandes.
+        total = query.with_entities(func.count()).order_by(None).scalar()
 
         column = None
         if order_by:
