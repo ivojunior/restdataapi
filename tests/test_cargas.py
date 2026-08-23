@@ -2,6 +2,7 @@ from datetime import date, timedelta
 
 from app.models.cliente import Cliente
 from app.models.item_carga import ItemCarga
+from app.models.motorista import Motorista
 from app.models.nota_fiscal_saida import NotaFiscalSaida
 from app.models.percurso import Percurso
 from app.models.veiculo_carga import VeiculoCarga
@@ -27,6 +28,7 @@ def _veiculo(**overrides):
         sequencia_carga="001",
         caminhao="ABC1234",
         status="1",
+        motorista="M0001",
     )
     dados.update(overrides)
     return VeiculoCarga(**dados)
@@ -63,6 +65,17 @@ def _percurso(**overrides):
     return Percurso(**dados)
 
 
+def _motorista(**overrides):
+    dados = dict(
+        deletado=" ",
+        filial="01",
+        codigo="M0001",
+        nome="Motorista Exemplo",
+    )
+    dados.update(overrides)
+    return Motorista(**dados)
+
+
 def _nota_fiscal(**overrides):
     dados = dict(
         deletado=" ",
@@ -86,7 +99,9 @@ def test_requer_api_key(client):
 
 
 def test_lista_com_join_de_veiculo_e_cliente(client, auth_headers, db_session):
-    db_session.add_all([_cliente(), _veiculo(), _item(), _nota_fiscal(), _percurso()])
+    db_session.add_all(
+        [_cliente(), _veiculo(), _item(), _nota_fiscal(), _percurso(), _motorista()]
+    )
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
@@ -97,11 +112,11 @@ def test_lista_com_join_de_veiculo_e_cliente(client, auth_headers, db_session):
     assert item["codigo"] == "000001"
     assert item["nome_cliente"] == "Cliente Exemplo Ltda"
     assert item["caminhao"] == "ABC1234"
-    # status "1" não está em ("7","8") -> case() do SQLAlchemy classifica como "Aberta".
+    # status "1" está em _STATUS_CARGA_ABERTOS -> case() classifica como "Aberta".
     assert item["status_carga"] == "Aberta"
     assert item["valor"] == "1500.00"
-    assert item["percurso"] == "0001"
     assert item["descricao_percurso"] == "Rota Padrão"
+    assert item["motorista"] == "Motorista Exemplo"
 
 
 def test_caminhao_placa_cliente_e_status_fechada_sao_formatados(client, auth_headers, db_session):
@@ -125,12 +140,29 @@ def test_caminhao_placa_cliente_e_status_fechada_sao_formatados(client, auth_hea
     assert dados["items"][0]["status_carga"] == "Fechada"
 
 
-def test_item_sem_percurso_correspondente_e_ignorado(client, auth_headers, db_session):
+def test_item_sem_percurso_correspondente_ainda_aparece(client, auth_headers, db_session):
+    # DA5070 (percurso) é LEFT JOIN em select_cargas.sql: item sem percurso
+    # cadastrado continua aparecendo, só com descricao_percurso nulo (não é
+    # mais excluído como uma versão anterior desta query fazia).
     db_session.add_all([_cliente(), _veiculo(), _item()])
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
-    assert len(resposta.json()["items"]) == 0
+    dados = resposta.json()
+    assert len(dados["items"]) == 1
+    assert dados["items"][0]["descricao_percurso"] is None
+
+
+def test_item_sem_motorista_correspondente_ainda_aparece(client, auth_headers, db_session):
+    # DA4070 (motorista) também é LEFT JOIN: sem motorista cadastrado no
+    # veículo, o item aparece normalmente com motorista nulo.
+    db_session.add_all([_cliente(), _veiculo(), _item(), _percurso()])
+    db_session.commit()
+
+    resposta = client.get("/cargas/", headers=auth_headers)
+    dados = resposta.json()
+    assert len(dados["items"]) == 1
+    assert dados["items"][0]["motorista"] is None
 
 
 def test_valor_vem_da_nota_fiscal_nao_do_veiculo(client, auth_headers, db_session):
@@ -185,7 +217,7 @@ def test_filtro_status_encerrada_agrupa_codigos_7_e_8(client, auth_headers, db_s
     assert {item["codigo"] for item in dados["items"]} == {"000002", "000003"}
 
 
-def test_filtro_status_aberta_agrupa_demais_codigos(client, auth_headers, db_session):
+def test_filtro_status_aberta_agrupa_codigos_1_a_6(client, auth_headers, db_session):
     db_session.add_all(
         [
             _cliente(),
@@ -206,22 +238,29 @@ def test_filtro_status_aberta_agrupa_demais_codigos(client, auth_headers, db_ses
     assert {item["codigo"] for item in dados["items"]} == {"000001", "000002"}
 
 
-def test_filtro_aberta_inclui_status_nulo(client, auth_headers, db_session):
-    # VeiculoCarga.status.notin_(("7","8")) sozinho nunca é verdadeiro quando
-    # a coluna é NULL (lógica de três valores do SQL) — sem o or_(is_(None)),
-    # essa carga sumiria tanto de "aberta" quanto de "encerrada", mesmo não
-    # estando em ('7','8'). status_carga (case()) já classifica NULL como
-    # "Aberta"; o filtro precisa ser consistente com isso.
-    db_session.add_all([_cliente(), _veiculo(status=None), _item(), _percurso()])
+def test_status_nulo_ou_fora_das_listas_nao_casa_com_nenhum_filtro(client, auth_headers, db_session):
+    # select_cargas.sql classifica STATUS com CASE sem ELSE: só ('1'..'6') é
+    # "Aberta" e ('7','8') é "Fechada" — um DAK_ACECAR nulo ou fora dessas
+    # duas listas (ex.: um código futuro "9") não casa com nenhum WHEN, o
+    # CASE retorna NULL, e a carga não deve aparecer nem em ?status=aberta
+    # nem em ?status=encerrada (mas continua na listagem sem filtro).
+    db_session.add_all(
+        [
+            _cliente(),
+            _veiculo(codigo="000001", sequencia_carga="001", status=None),
+            _item(codigo="000001", sequencia_carga="001"),
+            _veiculo(codigo="000002", sequencia_carga="001", status="9"),
+            _item(codigo="000002", sequencia_carga="001"),
+        ]
+    )
     db_session.commit()
 
-    resposta = client.get("/cargas/?status=aberta", headers=auth_headers)
-    dados = resposta.json()
-    assert len(dados["items"]) == 1
-    assert dados["items"][0]["status_carga"] == "Aberta"
+    sem_filtro = client.get("/cargas/", headers=auth_headers).json()
+    assert len(sem_filtro["items"]) == 2
+    assert {item["status_carga"] for item in sem_filtro["items"]} == {None}
 
-    resposta_encerrada = client.get("/cargas/?status=encerrada", headers=auth_headers)
-    assert len(resposta_encerrada.json()["items"]) == 0
+    assert len(client.get("/cargas/?status=aberta", headers=auth_headers).json()["items"]) == 0
+    assert len(client.get("/cargas/?status=encerrada", headers=auth_headers).json()["items"]) == 0
 
 
 def test_filtro_status_invalido_retorna_422(client, auth_headers):

@@ -20,6 +20,7 @@ class VeiculoCarga(Base):
     codigo = Column("DAK_COD", String(6))
     sequencia_carga = Column("DAK_SEQCAR", String(2))
     caminhao = Column("DAK_CAMINH", String(10))
+    motorista = Column("DAK_MOTORI", String(6))
     # Apesar do nome (dicionário padrão do Protheus: "Acerto de Carga Ok?"),
     # nesta instalação DAK_ACECAR foi customizado para guardar o status da
     # carga ("1"=Montada, "2"=Disp Conf Gega, "3"=Disp Prest Contas,

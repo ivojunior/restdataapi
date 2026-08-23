@@ -1,6 +1,7 @@
 from app.models.cliente import Cliente
 from app.models.fornecedor import Fornecedor
 from app.models.item_carga import ItemCarga
+from app.models.motorista import Motorista
 from app.models.nota_fiscal_saida import NotaFiscalSaida
 from app.models.percurso import Percurso
 from app.models.produto import Produto
@@ -20,4 +21,5 @@ __all__ = [
     "Cliente",
     "NotaFiscalSaida",
     "Percurso",
+    "Motorista",
 ]
