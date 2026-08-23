@@ -52,29 +52,36 @@ CHART_COLORS = [
 
 STATUS_FILTRO_PADRAO = "(Todos)"
 
-# Classificação do campo Status (DAK_ACECAR — customização desta instalação
-# do Protheus, sem lista pública de valores; confirmados pelo usuário): só
-# existem 2 tipos exibidos no cliente. Tudo que não for Encerrada (7) ou
-# Juros Pendentes (8) é considerado Aberta. O filtro é aplicado na própria
-# API (query string "status"), não localmente — veja StatusCargaFiltro em
-# app/routers/cargas.py, que faz a mesma classificação no servidor.
-STATUS_CARGA_FECHADOS = {"7", "8"}
+# O filtro por status (DAK_ACECAR, customização desta instalação do Protheus)
+# é resolvido inteiramente na API (query string "status" — veja
+# StatusCargaFiltro em app/routers/cargas.py); o nome do parâmetro
+# ("encerrada") é mantido por retrocompatibilidade, mas o rótulo exibido
+# aqui já é "Fechada" para bater com o texto que a própria API devolve no
+# campo status_carga (calculado com case() no servidor — ver abaixo).
 STATUS_CARGA_API_VALUES: Dict[str, str] = {
     "Aberta": "aberta",
-    "Encerrada": "encerrada",
+    "Fechada": "encerrada",
 }
 
+# A API já devolve caminhao/status_carga formatados (case() em
+# app/routers/cargas.py: "Cliente" no lugar da placa KHA0902, "Aberta"/
+# "Fechada" no lugar do código bruto de DAK_ACECAR) — o client não precisa
+# mais reclassificar essas colunas linha a linha, só exibir o que veio.
+STATUS_CARGA_FECHADO = "Fechada"
+
 TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
-    ("filial",        "Filial",      55,  "c"),
-    ("codigo",        "Carga",       75,  "c"),
-    ("data",          "Data",        85,  "c"),
-    ("pedido",        "Pedido",      80,  "c"),
-    ("nome_cliente",  "Cliente",    220,  "w"),
-    ("nota_fiscal",   "Nota Fiscal", 90,  "c"),
-    ("caminhao",      "Caminhão",    90,  "c"),
-    ("status_carga",  "Status",     130,  "c"),
-    ("peso",          "Peso (kg)",  110,  "e"),
-    ("valor",         "Valor (R$)", 120,  "e"),
+    ("filial",             "Filial",      55,  "c"),
+    ("codigo",              "Carga",       75,  "c"),
+    ("data",                "Data",        85,  "c"),
+    ("percurso",            "Percurso",    70,  "c"),
+    ("descricao_percurso",  "Descrição do Percurso", 160, "w"),
+    ("pedido",              "Pedido",      80,  "c"),
+    ("nome_cliente",        "Cliente",    220,  "w"),
+    ("nota_fiscal",         "Nota Fiscal", 90,  "c"),
+    ("caminhao",            "Caminhão",    90,  "c"),
+    ("status_carga",        "Status",     130,  "c"),
+    ("peso",                "Peso (kg)",  110,  "e"),
+    ("valor",               "Valor (R$)", 120,  "e"),
 ]
 
 
@@ -99,27 +106,6 @@ def _fmt_date(s) -> str:
     if len(s) == 8 and s.isdigit():
         return f"{s[6:8]}/{s[4:6]}/{s[:4]}"
     return s or "—"
-
-
-def _fmt_status(v) -> str:
-    """Classifica o status da carga (DAK_ACECAR) em apenas 2 tipos:
-    "Encerrada" (7 ou 8) ou "Aberta" (demais valores)."""
-    s = str(v or "").strip()
-    if not s:
-        return "—"
-    return "Encerrada" if s in STATUS_CARGA_FECHADOS else "Aberta"
-
-
-# Placa usada para indicar que o próprio cliente retirou a carga (sem
-# caminhão terceirizado vinculado) — exibida como "Cliente" em vez da placa.
-CAMINHAO_CLIENTE = "KHA0902"
-
-
-def _fmt_caminhao(v, vazio: str = "—") -> str:
-    s = str(v or "").strip()
-    if s == CAMINHAO_CLIENTE:
-        return "Cliente"
-    return s or vazio
 
 
 def _fmt_cliente_label(codigo, nome) -> str:
@@ -569,8 +555,9 @@ class CargasApp:
 
         caminhao = self._f_caminhao.get().strip().lower()
         if caminhao:
-            labels = df["caminhao"].apply(_fmt_caminhao).str.lower()
-            df = df[labels.str.contains(caminhao)]
+            # A API já devolve "caminhao" formatado (ver TREEVIEW_COLS acima);
+            # não precisa mais chamar nenhuma função de formatação aqui.
+            df = df[df["caminhao"].fillna("").str.lower().str.contains(caminhao)]
 
         return df
 
@@ -588,7 +575,7 @@ class CargasApp:
         valor_medio = valor_total / n_cargas if n_cargas else 0.0
 
         status_col = df["status_carga"].astype(str).str.strip()
-        valor_aberto = float(df.loc[~status_col.isin(STATUS_CARGA_FECHADOS), "valor"].sum())
+        valor_aberto = float(df.loc[status_col != STATUS_CARGA_FECHADO, "valor"].sum())
         valor_acertado = valor_total - valor_aberto
 
         self._kpi_vars["total_cargas"].set(f'{n_cargas:,}'.replace(",", "."))
@@ -694,19 +681,11 @@ class CargasApp:
         ax_evolucao.set_facecolor("#fafafa")
 
         # ── Gráfico 4: barras horizontais — Top 10 Caminhões por Peso ─────
-        # Equivalente vetorizado de df["caminhao"].apply(_fmt_caminhao, ...):
-        # aqui a normalização precisa rodar em todas as linhas (ela afeta o
-        # agrupamento, não só o rótulo final), mas .str.strip()/.mask() do
-        # pandas fazem isso em C, sem o custo de uma chamada Python por linha.
-        _caminhao_strip = df["caminhao"].fillna("").astype(str).str.strip()
-        caminhao_normalizado = (
-            _caminhao_strip
-            .mask(_caminhao_strip == CAMINHAO_CLIENTE, "Cliente")
-            .mask(_caminhao_strip == "", "(não informado)")
-        )
+        # A API já devolve "caminhao" normalizado (placa KHA0902 -> "Cliente"
+        # — ver TREEVIEW_COLS acima), então o agrupamento é direto, sem
+        # nenhuma normalização client-side.
         top_caminhoes = (
-            df.assign(caminhao=caminhao_normalizado)
-            .groupby("caminhao")["peso"]
+            df.groupby("caminhao")["peso"]
             .sum()
             .nlargest(10)
             .sort_values(ascending=True)
@@ -745,17 +724,20 @@ class CargasApp:
         # itertuples() em vez de iterrows(): iterrows() reconstrói cada linha
         # como uma Series do pandas (boxing caro por linha), enquanto
         # itertuples() gera tuplas nomeadas leves — ~7-10x mais rápido em
-        # bases grandes (medido: ~2.8s vs ~0.4s para 20 mil linhas).
+        # bases grandes (medido: ~2.8s vs ~0.4s para 20 mil linhas). caminhao
+        # e status_carga já chegam formatados da API, sem chamada extra aqui.
         for row in df.itertuples(index=False):
             self._tree.insert("", "end", values=(
                 row.filial,
                 row.codigo,
                 _fmt_date(row.data),
+                row.percurso,
+                row.descricao_percurso,
                 row.pedido,
                 row.nome_cliente,
                 row.nota_fiscal,
-                _fmt_caminhao(row.caminhao),
-                _fmt_status(row.status_carga),
+                row.caminhao,
+                row.status_carga,
                 _peso(row.peso),
                 _brl(row.valor),
             ))
@@ -876,6 +858,8 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Filial",        "filial",        9),
         ("Carga",         "codigo",       12),
         ("Data",          "data",         13),
+        ("Percurso",      "percurso",     12),
+        ("Descrição do Percurso", "descricao_percurso", 30),
         ("Pedido",        "pedido",       13),
         ("Cliente",       "nome_cliente", 34),
         ("Nota Fiscal",   "nota_fiscal",  14),
@@ -892,16 +876,13 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
 
     # itertuples() em vez de iterrows(): ver comentário equivalente em
     # _update_table() — bem mais rápido para planilhas com muitas linhas.
+    # caminhao/status_carga já chegam formatados da API.
     for ri, row in enumerate(df.itertuples(index=False), 2):
         row_fill = ALT_FILL if ri % 2 == 0 else None
         for ci, (_, field, _) in enumerate(cols_aba1, 1):
             val = getattr(row, field, None)
             if field == "data":
                 val = _fmt_date(val)
-            elif field == "status_carga":
-                val = _fmt_status(val)
-            elif field == "caminhao":
-                val = _fmt_caminhao(val)
             cell = ws1.cell(row=ri, column=ci, value=val)
             cell.border = BORDER
             if field == "valor":
@@ -930,7 +911,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     valor_medio = valor_total / n_cargas if n_cargas else 0.0
 
     status_col = df["status_carga"].astype(str).str.strip()
-    valor_aberto = float(df.loc[~status_col.isin(STATUS_CARGA_FECHADOS), "valor"].sum())
+    valor_aberto = float(df.loc[status_col != STATUS_CARGA_FECHADO, "valor"].sum())
     valor_acertado = valor_total - valor_aberto
 
     items_resumo = [
