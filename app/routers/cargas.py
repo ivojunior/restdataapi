@@ -53,19 +53,85 @@ class StatusCargaFiltro(str, enum.Enum):
 
     O nome do parâmetro de query ("encerrada") é mantido por
     retrocompatibilidade; o texto de fato retornado no campo status_carga
-    (ver case() em _query_cargas) é "Fechada".
+    (ver case() em _projecao_cargas) é "Fechada".
     """
 
     aberta = "aberta"
     encerrada = "encerrada"
 
 
-def _query_cargas(
+_ORDEM_CARGAS = (ItemCarga.filial, ItemCarga.codigo, ItemCarga.sequencia_carga)
+
+
+def _filtro_cargas(
     db: Session,
     data_inicial: str,
     data_final: Optional[str] = None,
     status: Optional[StatusCargaFiltro] = None,
 ):
+    """JOINs/filtros que determinam QUAIS itens de carga existem e em que
+    ordem — só DAK070 (join obrigatório, também usado no filtro de status)
+    e SA1070 (join obrigatório). Não inclui DA5070/DA4070 (LEFT JOIN, nunca
+    removem linha) nem a subquery de valor: nenhum dos dois afeta
+    quantidade ou ordem das linhas, só os dados extras de cada uma. Usado
+    para paginar (fase 1, barata) antes de buscar a projeção completa só
+    para a página resultante (fase 2) — ver listar_cargas.
+    """
+    query = (
+        db.query(ItemCarga.rec_no)
+        .join(
+            VeiculoCarga,
+            and_(
+                VeiculoCarga.deletado != "*",
+                VeiculoCarga.filial == ItemCarga.filial,
+                VeiculoCarga.codigo == ItemCarga.codigo,
+                VeiculoCarga.sequencia_carga == ItemCarga.sequencia_carga,
+            ),
+        )
+        .join(
+            Cliente,
+            and_(
+                Cliente.deletado != "*",
+                Cliente.filial == ItemCarga.filial,
+                Cliente.codigo == ItemCarga.cliente,
+                Cliente.loja == ItemCarga.loja,
+            ),
+        )
+        .filter(
+            ItemCarga.deletado != "*",
+            ItemCarga.sequencia != _SEQUENCIA_CANCELADA,
+            # Diferente do select_cargas.sql original (data mínima fixa em
+            # '20260801'), aqui a data é parametrizável via query string: cada
+            # cliente/integração decide a partir de qual data quer consultar
+            # as cargas. Sem o parâmetro, assume a data atual do sistema.
+            ItemCarga.data >= data_inicial,
+        )
+    )
+    if data_final:
+        query = query.filter(ItemCarga.data <= data_final)
+    if status == StatusCargaFiltro.encerrada:
+        query = query.filter(VeiculoCarga.status.in_(_STATUS_CARGA_FECHADOS))
+    elif status == StatusCargaFiltro.aberta:
+        # VeiculoCarga.status.notin_(...) sozinho tem o problema clássico do
+        # NOT IN com NULL em SQL: se DAK_ACECAR for NULL, "NULL NOT IN (...)"
+        # nunca é verdadeiro (lógica de três valores) — a carga sumiria do
+        # filtro "aberta" mesmo o case() de status_coluna (com ELSE) já
+        # classificando NULL como "Aberta". or_(is_(None), ...) replica
+        # explicitamente essa mesma regra do ELSE no filtro.
+        query = query.filter(
+            or_(
+                VeiculoCarga.status.is_(None),
+                VeiculoCarga.status.notin_(_STATUS_CARGA_FECHADOS),
+            )
+        )
+    return query
+
+
+def _projecao_cargas(db: Session, rec_nos: list):
+    """Projeção completa (colunas + joins de apoio + subquery de valor), só
+    para os rec_no já escolhidos pela paginação em _filtro_cargas — ver
+    comentário em listar_cargas sobre por que separar as duas fases.
+    """
     # select_cargas.sql busca o valor da carga com uma subconsulta correlacionada
     # em SE1070 (nota fiscal), casando filial/série/número/cliente/loja — não é
     # DAK_VALOR. ISNULL(...,0) na query original == coalesce(...,0) aqui.
@@ -120,7 +186,7 @@ def _query_cargas(
         else_="Aberta",
     )
 
-    query = (
+    return (
         db.query(
             ItemCarga.filial,
             ItemCarga.codigo,
@@ -154,10 +220,6 @@ def _query_cargas(
                 Cliente.loja == ItemCarga.loja,
             ),
         )
-        # Diferente de uma versão anterior desta query, DA5070 (percurso) e
-        # DA4070 (motorista) agora são LEFT JOIN em select_cargas.sql — itens
-        # sem percurso/motorista cadastrado continuam aparecendo, só com
-        # descricao_percurso/motorista nulos, em vez de serem excluídos.
         .outerjoin(
             Percurso,
             and_(
@@ -174,34 +236,12 @@ def _query_cargas(
                 Motorista.codigo == VeiculoCarga.motorista,
             ),
         )
-        .filter(
-            ItemCarga.deletado != "*",
-            ItemCarga.sequencia != _SEQUENCIA_CANCELADA,
-            # Diferente do select_cargas.sql original (data mínima fixa em
-            # '20260801'), aqui a data é parametrizável via query string: cada
-            # cliente/integração decide a partir de qual data quer consultar
-            # as cargas. Sem o parâmetro, assume a data atual do sistema.
-            ItemCarga.data >= data_inicial,
-        )
+        # rec_no é a chave primária de DAI070 (R_E_C_N_O_) — filtrar por um
+        # IN de no máximo `limit` valores já conhecidos é uma busca por
+        # chave, bem mais barata do que reaplicar filtro de data/status
+        # sobre a tabela inteira de novo.
+        .filter(ItemCarga.rec_no.in_(rec_nos))
     )
-    if data_final:
-        query = query.filter(ItemCarga.data <= data_final)
-    if status == StatusCargaFiltro.encerrada:
-        query = query.filter(VeiculoCarga.status.in_(_STATUS_CARGA_FECHADOS))
-    elif status == StatusCargaFiltro.aberta:
-        # VeiculoCarga.status.notin_(...) sozinho tem o problema clássico do
-        # NOT IN com NULL em SQL: se DAK_ACECAR for NULL, "NULL NOT IN (...)"
-        # nunca é verdadeiro (lógica de três valores) — a carga sumiria do
-        # filtro "aberta" mesmo o case() de status_coluna (com ELSE) já
-        # classificando NULL como "Aberta". or_(is_(None), ...) replica
-        # explicitamente essa mesma regra do ELSE no filtro.
-        query = query.filter(
-            or_(
-                VeiculoCarga.status.is_(None),
-                VeiculoCarga.status.notin_(_STATUS_CARGA_FECHADOS),
-            )
-        )
-    return query
 
 
 @router.get("/", response_model=PaginatedResponse[CargaRead])
@@ -227,13 +267,32 @@ def listar_cargas(
     db: Session = Depends(get_db),
 ):
     data_filtro = data_inicial or date.today().strftime("%Y%m%d")
-    query = _query_cargas(db, data_filtro, data_final, status)
-    linhas = (
-        query.order_by(ItemCarga.filial, ItemCarga.codigo, ItemCarga.sequencia_carga)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+
+    # Paginação em duas fases: a fase 1 só resolve QUAIS rec_no entram na
+    # página (sem os LEFT JOIN de percurso/motorista nem a subquery
+    # correlacionada de valor — nenhum dos dois muda quantidade/ordem de
+    # linhas). A fase 2 busca a projeção completa filtrando só por esses
+    # rec_no (chave primária). Numa única query só (como era antes), o
+    # SQL Server pode não conseguir empurrar o OFFSET/FETCH para antes de
+    # calcular a subquery/joins de apoio — dependendo do plano escolhido,
+    # ele acaba rodando isso para TODAS as linhas que casam no período
+    # (que podem ser muito mais que `limit`), não só as da página. Separar
+    # em duas fases garante que o trabalho caro só rode para as linhas
+    # realmente devolvidas, independente do plano do otimizador.
+    rec_nos = [
+        rec_no
+        for (rec_no,) in (
+            _filtro_cargas(db, data_filtro, data_final, status)
+            .order_by(*_ORDEM_CARGAS)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+    ]
+    if not rec_nos:
+        return {"skip": skip, "limit": limit, "items": []}
+
+    linhas = _projecao_cargas(db, rec_nos).order_by(*_ORDEM_CARGAS).all()
 
     items = [
         CargaRead(
