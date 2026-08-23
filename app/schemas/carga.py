@@ -23,10 +23,9 @@ class CargaRead(BaseModel):
     peso: Decimal
     nota_fiscal: str
     # Já vêm formatados pela API (case do SQL/SQLAlchemy — ver
-    # app/routers/cargas.py): "Cliente" no lugar da placa KHA0902.
+    # app/routers/cargas.py): "Cliente" no lugar da placa KHA0902, e
+    # "Aberta"/"Fechada" no lugar do código bruto de DAK_ACECAR (CASE com
+    # ELSE 'Aberta' — nunca nulo).
     caminhao: str
-    # O CASE de status_carga não tem ELSE (só classifica DAK_ACECAR em
-    # ('1'..'6') como "Aberta" e ('7','8') como "Fechada") — qualquer outro
-    # código, ou NULL, resulta em status_carga None.
-    status_carga: Optional[str] = None
+    status_carga: str
     valor: Decimal

@@ -2,7 +2,7 @@ import enum
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, Query
@@ -30,14 +30,16 @@ _SEQUENCIA_CANCELADA = "999999"
 
 
 # Códigos de DAK_ACECAR (customização desta instalação do Protheus, sem
-# lista pública de valores — confirmados pelo usuário) classificados por
-# select_cargas.sql. Diferente de uma versão anterior desta consulta, agora
-# é uma enumeração explícita nos dois sentidos (não "fechados" vs "qualquer
-# outro código"): o CASE de status_coluna não tem ELSE, então um código fora
-# dessas duas listas (ou NULL) não é nem "Aberta" nem "Fechada" — vira None
-# e não aparece em nenhum dos dois filtros de status.
+# lista pública de valores — confirmados pelo usuário) considerados
+# "fechados" por select_cargas.sql (CASE ... ELSE 'Aberta'). Qualquer código
+# fora dessa lista — incluindo NULL — é "aberto".
+#
+# NOTA histórica: select_cargas.sql já alternou entre este ELSE catch-all e
+# uma enumeração explícita de códigos "abertos" (sem ELSE, deixando um
+# código desconhecido como NULL). Se voltar a mudar, o ponto de ajuste é
+# só aqui + o filtro "aberta" abaixo (que precisa tratar NULL do mesmo jeito
+# que o CASE de status_coluna trata).
 _STATUS_CARGA_FECHADOS = ("7", "8")
-_STATUS_CARGA_ABERTOS = ("1", "2", "3", "4", "5", "6")
 
 # Placa usada para indicar que o próprio cliente retirou a carga (sem
 # caminhão terceirizado vinculado) — select_cargas.sql substitui por
@@ -46,11 +48,8 @@ _CAMINHAO_CLIENTE = "KHA0902"
 
 
 class StatusCargaFiltro(str, enum.Enum):
-    """Classificação do status da carga (DAK_ACECAR) em 2 tipos: "encerrada"
-    (códigos 7 e 8) ou "aberta" (códigos 1 a 6). Um código fora dessas duas
-    listas (ou DAK_ACECAR nulo) não casa com nenhum dos dois filtros — igual
-    ao CASE sem ELSE de select_cargas.sql, que nesse caso deixa status_carga
-    nulo em vez de cair num "aberta" por padrão.
+    """Classificação do status da carga (DAK_ACECAR) em apenas 2 tipos:
+    "encerrada" (códigos 7 e 8) ou "aberta" (demais códigos, incluindo NULL).
 
     O nome do parâmetro de query ("encerrada") é mantido por
     retrocompatibilidade; o texto de fato retornado no campo status_carga
@@ -116,13 +115,9 @@ def _query_cargas(
         (VeiculoCarga.caminhao == _CAMINHAO_CLIENTE, "Cliente"),
         else_=VeiculoCarga.caminhao,
     )
-    # Sem ELSE (diferente de uma versão anterior desta query): um código fora
-    # de _STATUS_CARGA_ABERTOS/_STATUS_CARGA_FECHADOS (ou NULL) não casa com
-    # nenhum WHEN, e o CASE retorna NULL — replicado abaixo com os dois
-    # WHENs de case() e sem else_.
     status_coluna = case(
         (VeiculoCarga.status.in_(_STATUS_CARGA_FECHADOS), "Fechada"),
-        (VeiculoCarga.status.in_(_STATUS_CARGA_ABERTOS), "Aberta"),
+        else_="Aberta",
     )
 
     query = (
@@ -194,10 +189,18 @@ def _query_cargas(
     if status == StatusCargaFiltro.encerrada:
         query = query.filter(VeiculoCarga.status.in_(_STATUS_CARGA_FECHADOS))
     elif status == StatusCargaFiltro.aberta:
-        # Igual ao case() de status_coluna: só os códigos explícitos de
-        # _STATUS_CARGA_ABERTOS contam como "aberta" — um DAK_ACECAR nulo ou
-        # fora das duas listas não casa com nenhum dos dois filtros.
-        query = query.filter(VeiculoCarga.status.in_(_STATUS_CARGA_ABERTOS))
+        # VeiculoCarga.status.notin_(...) sozinho tem o problema clássico do
+        # NOT IN com NULL em SQL: se DAK_ACECAR for NULL, "NULL NOT IN (...)"
+        # nunca é verdadeiro (lógica de três valores) — a carga sumiria do
+        # filtro "aberta" mesmo o case() de status_coluna (com ELSE) já
+        # classificando NULL como "Aberta". or_(is_(None), ...) replica
+        # explicitamente essa mesma regra do ELSE no filtro.
+        query = query.filter(
+            or_(
+                VeiculoCarga.status.is_(None),
+                VeiculoCarga.status.notin_(_STATUS_CARGA_FECHADOS),
+            )
+        )
     return query
 
 
@@ -217,10 +220,9 @@ def listar_cargas(
     ),
     status: Optional[StatusCargaFiltro] = Query(
         None,
-        description="Filtra pelo status da carga (DAK_ACECAR): 'encerrada' "
-        "(códigos 7 ou 8) ou 'aberta' (códigos 1 a 6). Um código fora dessas "
-        "duas listas, ou DAK_ACECAR nulo, não casa com nenhum dos dois "
-        "filtros. Sem o parâmetro, traz cargas de qualquer status.",
+        description="Filtra pelo status da carga (DAK_ACECAR), classificado em "
+        "apenas 2 tipos: 'encerrada' (códigos 7 ou 8) ou 'aberta' (demais "
+        "códigos, incluindo nulo). Sem o parâmetro, traz cargas de qualquer status.",
     ),
     db: Session = Depends(get_db),
 ):

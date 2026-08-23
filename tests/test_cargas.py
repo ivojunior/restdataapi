@@ -217,7 +217,7 @@ def test_filtro_status_encerrada_agrupa_codigos_7_e_8(client, auth_headers, db_s
     assert {item["codigo"] for item in dados["items"]} == {"000002", "000003"}
 
 
-def test_filtro_status_aberta_agrupa_codigos_1_a_6(client, auth_headers, db_session):
+def test_filtro_status_aberta_agrupa_demais_codigos(client, auth_headers, db_session):
     db_session.add_all(
         [
             _cliente(),
@@ -238,12 +238,13 @@ def test_filtro_status_aberta_agrupa_codigos_1_a_6(client, auth_headers, db_sess
     assert {item["codigo"] for item in dados["items"]} == {"000001", "000002"}
 
 
-def test_status_nulo_ou_fora_das_listas_nao_casa_com_nenhum_filtro(client, auth_headers, db_session):
-    # select_cargas.sql classifica STATUS com CASE sem ELSE: só ('1'..'6') é
-    # "Aberta" e ('7','8') é "Fechada" — um DAK_ACECAR nulo ou fora dessas
-    # duas listas (ex.: um código futuro "9") não casa com nenhum WHEN, o
-    # CASE retorna NULL, e a carga não deve aparecer nem em ?status=aberta
-    # nem em ?status=encerrada (mas continua na listagem sem filtro).
+def test_filtro_aberta_inclui_status_nulo_e_codigo_desconhecido(client, auth_headers, db_session):
+    # VeiculoCarga.status.notin_(("7","8")) sozinho nunca é verdadeiro quando
+    # a coluna é NULL (lógica de três valores do SQL) — sem o or_(is_(None)),
+    # essa carga sumiria tanto de "aberta" quanto de "encerrada", mesmo não
+    # estando em ('7','8'). status_carga (case() com ELSE 'Aberta') já
+    # classifica NULL — e qualquer código fora de ('7','8'), como "9" — como
+    # "Aberta"; o filtro precisa ser consistente com isso.
     db_session.add_all(
         [
             _cliente(),
@@ -257,10 +258,13 @@ def test_status_nulo_ou_fora_das_listas_nao_casa_com_nenhum_filtro(client, auth_
 
     sem_filtro = client.get("/cargas/", headers=auth_headers).json()
     assert len(sem_filtro["items"]) == 2
-    assert {item["status_carga"] for item in sem_filtro["items"]} == {None}
+    assert {item["status_carga"] for item in sem_filtro["items"]} == {"Aberta"}
 
-    assert len(client.get("/cargas/?status=aberta", headers=auth_headers).json()["items"]) == 0
-    assert len(client.get("/cargas/?status=encerrada", headers=auth_headers).json()["items"]) == 0
+    resposta_aberta = client.get("/cargas/?status=aberta", headers=auth_headers).json()
+    assert len(resposta_aberta["items"]) == 2
+
+    resposta_encerrada = client.get("/cargas/?status=encerrada", headers=auth_headers).json()
+    assert len(resposta_encerrada["items"]) == 0
 
 
 def test_filtro_status_invalido_retorna_422(client, auth_headers):
