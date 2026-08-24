@@ -407,8 +407,11 @@ class CargasApp:
                               stretch=(col_id == "nome_cliente"))
 
         # Linhas cuja Data está a mais de 3 dias (pra trás ou pra frente) da
-        # data do sistema ficam com o texto em vermelho — ver _update_table().
-        self._tree.tag_configure("data_distante", foreground="#e74c3c")
+        # data do sistema ficam com o texto em vermelho e negrito — ver
+        # _update_table(). Mesma família/tamanho da fonte base do Treeview
+        # (_setup_styles), só trocando o peso pra "bold".
+        self._tree.tag_configure(
+            "data_distante", foreground="#e74c3c", font=("Segoe UI", 10, "bold"))
 
         vsb = ttk.Scrollbar(parent, orient="vertical",   command=self._tree.yview)
         hsb = ttk.Scrollbar(parent, orient="horizontal", command=self._tree.xview)
