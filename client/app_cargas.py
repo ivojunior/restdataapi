@@ -406,6 +406,10 @@ class CargasApp:
             self._tree.column(col_id, width=width, anchor=anchor,
                               stretch=(col_id == "nome_cliente"))
 
+        # Linhas cuja Data está a mais de 3 dias (pra trás ou pra frente) da
+        # data do sistema ficam com o texto em vermelho — ver _update_table().
+        self._tree.tag_configure("data_distante", foreground="#e74c3c")
+
         vsb = ttk.Scrollbar(parent, orient="vertical",   command=self._tree.yview)
         hsb = ttk.Scrollbar(parent, orient="horizontal", command=self._tree.xview)
         self._tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
@@ -758,14 +762,27 @@ class CargasApp:
             "peso": df["peso"].apply(_peso),
             "valor": df["valor"].apply(_brl),
         })
+
+        # Diferença (em módulo) entre a Data da linha e a data do sistema,
+        # calculada de uma vez pro DataFrame inteiro (vetorizado), não linha
+        # a linha — mesmo motivo do comentário acima. Datas inválidas viram
+        # NaT (errors="coerce") e a comparação com NaN dá False, então essas
+        # linhas simplesmente não ficam vermelhas (sem exceção).
+        dias_diferenca = (
+            pd.to_datetime(df["data"], format="%Y%m%d", errors="coerce")
+            - pd.Timestamp(date.today())
+        ).dt.days.abs()
+        data_distante = dias_diferenca > 3
+
         # Desanexa o Treeview da UI durante o insert em massa (grid_remove()
         # preserva as opções de grid, diferente de grid_forget()) — evita
         # que o widget tente redesenhar/recalcular layout a cada linha
         # inserida enquanto está fora da tela.
         self._tree.grid_remove()
         try:
-            for row in fmt.itertuples(index=False):
-                self._tree.insert("", "end", values=row)
+            for row, distante in zip(fmt.itertuples(index=False), data_distante):
+                tags = ("data_distante",) if distante else ()
+                self._tree.insert("", "end", values=row, tags=tags)
         finally:
             self._tree.grid()
 
