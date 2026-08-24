@@ -73,10 +73,11 @@ TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
     ("filial",             "Filial",      55,  "c"),
     ("codigo",              "Carga",       75,  "c"),
     ("data",                "Data",        85,  "c"),
-    ("descricao_percurso",  "Percurso",    160, "w"),
     ("pedido",              "Pedido",      80,  "c"),
     ("motorista",           "Motorista",  150,  "w"),
-    ("nome_cliente",        "Cliente",    220,  "w"),
+    ("nome_cliente",        "Cliente",    200,  "w"),
+    ("bairro_cliente",      "Bairro",     130,  "w"),
+    ("municipio_cliente",   "Município",  130,  "w"),
     ("nota_fiscal",         "Nota Fiscal", 90,  "c"),
     ("caminhao",            "Caminhão",    90,  "c"),
     ("status_carga",        "Status",     130,  "c"),
@@ -109,9 +110,11 @@ def _fmt_date(s) -> str:
 
 
 def _or_dash(v) -> str:
-    """descricao_percurso, motorista e status_carga podem vir None da API
-    (LEFT JOIN/CASE sem ELSE — ver app/routers/cargas.py); sem isso, o
-    Treeview do Tkinter mostraria o texto literal "None" na célula."""
+    """motorista pode vir None da API (LEFT JOIN com DA4070 — ver
+    app/routers/cargas.py); bairro_cliente/municipio_cliente podem vir
+    vazios/nulos se o cadastro do cliente não tiver esses campos
+    preenchidos no Protheus. Sem isso, o Treeview do Tkinter mostraria o
+    texto literal "None" na célula."""
     return str(v) if v not in (None, "") else "—"
 
 
@@ -732,23 +735,23 @@ class CargasApp:
         # _fmt_date/_peso/_brl/_or_dash linha a linha dentro dele: fazer as
         # duas coisas juntas (formatar + tree.insert(), que cruza a ponte
         # Tcl) é mais lento do que separá-las — medido ~30% mais rápido
-        # assim, e o ganho fica mais visível agora que os LEFT JOIN de
-        # percurso/motorista trazem mais linhas do que antes (itens sem
-        # correspondência deixaram de ser excluídos). itertuples() em vez de
-        # iterrows() continua sendo o ganho principal (~7-10x): iterrows()
-        # reconstrói cada linha como uma Series do pandas (boxing caro por
-        # linha); itertuples() gera tuplas nomeadas leves. caminhao e
-        # status_carga já chegam formatados e nunca nulos da API (case()
-        # sempre com ELSE — ver app/routers/cargas.py), sem tratamento extra
-        # aqui; descricao_percurso e motorista podem vir nulos (LEFT JOIN).
+        # assim. itertuples() em vez de iterrows() continua sendo o ganho
+        # principal (~7-10x): iterrows() reconstrói cada linha como uma
+        # Series do pandas (boxing caro por linha); itertuples() gera
+        # tuplas nomeadas leves. caminhao e status_carga já chegam
+        # formatados e nunca nulos da API (case() sempre com ELSE — ver
+        # app/routers/cargas.py), sem tratamento extra aqui; motorista
+        # (LEFT JOIN) e bairro_cliente/municipio_cliente (podem vir vazios
+        # no cadastro do cliente) usam _or_dash.
         fmt = pd.DataFrame({
             "filial": df["filial"],
             "codigo": df["codigo"],
             "data": df["data"].apply(_fmt_date),
-            "descricao_percurso": df["descricao_percurso"].apply(_or_dash),
             "pedido": df["pedido"],
             "motorista": df["motorista"].apply(_or_dash),
             "nome_cliente": df["nome_cliente"],
+            "bairro_cliente": df["bairro_cliente"].apply(_or_dash),
+            "municipio_cliente": df["municipio_cliente"].apply(_or_dash),
             "nota_fiscal": df["nota_fiscal"],
             "caminhao": df["caminhao"],
             "status_carga": df["status_carga"],
@@ -882,10 +885,11 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Filial",        "filial",        9),
         ("Carga",         "codigo",       12),
         ("Data",          "data",         13),
-        ("Percurso",      "descricao_percurso", 30),
         ("Pedido",        "pedido",       13),
         ("Motorista",     "motorista",    26),
         ("Cliente",       "nome_cliente", 34),
+        ("Bairro",        "bairro_cliente", 24),
+        ("Município",     "municipio_cliente", 24),
         ("Nota Fiscal",   "nota_fiscal",  14),
         ("Caminhão",      "caminhao",     14),
         ("Status",        "status_carga", 18),
