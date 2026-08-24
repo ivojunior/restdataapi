@@ -195,11 +195,18 @@ def _query_cargas(
             # '20260801'), aqui a data é parametrizável via query string: cada
             # cliente/integração decide a partir de qual data quer consultar
             # as cargas. Sem o parâmetro, assume a data atual do sistema.
-            ItemCarga.data >= data_inicial,
+            #
+            # Filtra por VeiculoCarga.data (DAK_DATA), não ItemCarga.data
+            # (DAI_DATA): DAK070 tem uma linha por veículo/sequência de carga,
+            # bem menos linhas que DAI070 (uma por item) — filtrar na tabela
+            # menor é mais barato. O campo `data` retornado em CargaRead
+            # continua vindo de DAI070 (data do item), sem mudança — só o
+            # predicado do filtro migrou de tabela.
+            VeiculoCarga.data >= data_inicial,
         )
     )
     if data_final:
-        query = query.filter(ItemCarga.data <= data_final)
+        query = query.filter(VeiculoCarga.data <= data_final)
     if status == StatusCargaFiltro.encerrada:
         query = query.filter(VeiculoCarga.status.in_(_STATUS_CARGA_FECHADOS))
     elif status == StatusCargaFiltro.aberta:
@@ -224,12 +231,12 @@ def listar_cargas(
     limit: int = Query(50, le=200),
     data_inicial: Optional[str] = Query(
         None,
-        description="Data mínima da carga, formato AAAAMMDD (DAI_DATA >= data_inicial). "
+        description="Data mínima da carga, formato AAAAMMDD (DAK_DATA >= data_inicial). "
         "Sem o parâmetro, assume a data atual do sistema.",
     ),
     data_final: Optional[str] = Query(
         None,
-        description="Data máxima da carga, formato AAAAMMDD (DAI_DATA <= data_final). "
+        description="Data máxima da carga, formato AAAAMMDD (DAK_DATA <= data_final). "
         "Sem o parâmetro, não há limite superior.",
     ),
     status: Optional[StatusCargaFiltro] = Query(

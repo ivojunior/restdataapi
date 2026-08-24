@@ -19,6 +19,12 @@ class VeiculoCarga(Base):
     filial = Column("DAK_FILIAL", String(2))
     codigo = Column("DAK_COD", String(6))
     sequencia_carga = Column("DAK_SEQCAR", String(2))
+    # Formato AAAAMMDD (string), igual a DAI_DATA em DAI070 — usado para
+    # filtrar data_inicial/data_final no relatório de cargas (ver
+    # app/routers/cargas.py): DAK070 tem uma linha por veículo/sequência de
+    # carga, bem menos linhas que DAI070 (uma por item), então filtrar aqui
+    # é mais barato do que filtrar em DAI070.
+    data = Column("DAK_DATA", String(8))
     caminhao = Column("DAK_CAMINH", String(10))
     motorista = Column("DAK_MOTORI", String(6))
     # Apesar do nome (dicionário padrão do Protheus: "Acerto de Carga Ok?"),

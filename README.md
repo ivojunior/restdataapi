@@ -39,7 +39,7 @@ Atualmente a API só lê tabelas que já existem em outro sistema (o Protheus). 
 - **Produto** (tabela `SB1000` — Cadastro de Produtos): `rec_no (R_E_C_N_O_), filial, codigo, descricao, tipo, unidade_medida, grupo, local_padrao, conversao, ncm, peso_liquido, peso_bruto, codigo_barras, preco_venda, bloqueado`. Usada também como apoio (join) no relatório `/saldos-estoque/`.
 - **TipoOperacao** (tabela `PA6000` — Tipos de Operação Financeira): `rec_no (R_E_C_N_O_), filial, codigo, descricao`. Usada apenas como apoio (join) no relatório `/financeiro/`, sem rota própria.
 - **ItemCarga** (tabela `DAI070` — Itens de Carga): `rec_no (R_E_C_N_O_), filial, codigo, sequencia_carga, sequencia, data, percurso, pedido, cliente, loja, peso, nota_fiscal, serie`. Tabela principal do relatório `/cargas/`. `percurso` (`DAI_PERCUR`) é usado só internamente, para o join com `DA5070` — não é exposto pela API.
-- **VeiculoCarga** (tabela `DAK070` — Veículos da Carga): `rec_no (R_E_C_N_O_), filial, codigo, sequencia_carga, caminhao, status, motorista`. Usada apenas como apoio (join) no relatório `/cargas/`, sem rota própria. `status` (`DAK_ACECAR`) é uma customização desta instalação — veja `/cargas/` abaixo. `motorista` (`DAK_MOTORI`) é usado só internamente, para o join com `DA4070`.
+- **VeiculoCarga** (tabela `DAK070` — Veículos da Carga): `rec_no (R_E_C_N_O_), filial, codigo, sequencia_carga, data, caminhao, status, motorista`. Usada apenas como apoio (join) no relatório `/cargas/`, sem rota própria. `status` (`DAK_ACECAR`) é uma customização desta instalação — veja `/cargas/` abaixo. `motorista` (`DAK_MOTORI`) é usado só internamente, para o join com `DA4070`. `data` (`DAK_DATA`) é usado só internamente, para os filtros `data_inicial`/`data_final` de `/cargas/` (não confundir com `data` de `ItemCarga`, retornada em cada item).
 - **Cliente** (tabela `SA1070` — Clientes): `rec_no (R_E_C_N_O_), filial, codigo, loja, nome`. Usada apenas como apoio (join) no relatório `/cargas/`, sem rota própria.
 - **NotaFiscalSaida** (tabela `SE1070` — Notas Fiscais de Saída): `rec_no (R_E_C_N_O_), filial, prefixo, numero, cliente, loja, valor, carga, sequencia_carga`. Usada apenas como apoio (subconsulta correlacionada) no relatório `/cargas/`, para obter o valor da carga, sem rota própria.
 - **Percurso** (tabela `DA5070` — Percursos): `rec_no (R_E_C_N_O_), filial, codigo, descricao`. Usada apenas como apoio (join opcional/`LEFT JOIN`) no relatório `/cargas/`, para obter a descrição do percurso (`DAI_PERCUR`) do item de carga, sem rota própria.
@@ -170,8 +170,8 @@ Baseado no `SELECT` de `select_cargas.sql`: junta `DAI070` (item de carga) com `
 
 Diferente da consulta original — que fixa a data mínima em `'20260801'` e o status em `:STATUS_CARGA` — aqui os dois **não são fixos**: são parametrizáveis via query string.
 
-- `data_inicial` (opcional): filtra pela data do item (`DAI_DATA`, formato `AAAAMMDD`), trazendo apenas cargas com `data >= data_inicial`. Sem o parâmetro, assume a data atual do sistema (equivalente a `data_inicial=<hoje>`).
-- `data_final` (opcional): filtra pela data do item (`DAI_DATA`, formato `AAAAMMDD`), trazendo apenas cargas com `data <= data_final`. Sem o parâmetro, não há limite superior.
+- `data_inicial` (opcional): filtra pela data do veículo (`DAK_DATA` em `DAK070`, formato `AAAAMMDD`), trazendo apenas cargas com `data >= data_inicial`. Sem o parâmetro, assume a data atual do sistema (equivalente a `data_inicial=<hoje>`). Filtra em `DAK070`, não em `DAI070` (que também tem uma data, `DAI_DATA`, retornada no campo `data` de cada item): `DAK070` tem uma linha por veículo/sequência de carga, bem menos linhas que `DAI070` (uma por item) — filtrar na tabela menor é mais barato.
+- `data_final` (opcional): mesma coluna (`DAK_DATA`), trazendo apenas cargas com `data <= data_final`. Sem o parâmetro, não há limite superior.
 - `status` (opcional, valores `aberta`/`encerrada`): filtra pelo status da carga (`DAK_ACECAR`) — `encerrada` (códigos `7` ou `8`) ou `aberta` (qualquer outro código, incluindo nulo). Sem o parâmetro, traz cargas de qualquer status. `DAK_ACECAR` é uma customização desta instalação do Protheus (no dicionário padrão é "Acerto de Carga Ok?", campo `C(1)` sem lista pública de valores) — os códigos `7`/`8` foram confirmados pelo usuário, não por documentação oficial. O filtro é resolvido no banco (`IN`/`NOT IN` com tratamento explícito de `NULL` — veja `_filtro_cargas` em `app/routers/cargas.py`), não no cliente, para não trafegar o volume completo do relatório a cada consulta. O nome do parâmetro (`encerrada`) é mantido por retrocompatibilidade — o texto de fato devolvido no campo `status_carga` (veja abaixo) é `"Fechada"`, igual ao `CASE` de `select_cargas.sql`.
 
 Assim como `select_cargas.sql`, os campos `caminhao` e `status_carga` já vêm formatados pela própria consulta (via `CASE`/`case()` do SQLAlchemy, calculado no banco — sem custo adicional no plano de execução, pois não entra em `JOIN`/`WHERE`): `caminhao` substitui a placa `KHA0902` por `"Cliente"` (retirada pelo próprio cliente, sem caminhão terceirizado); `status_carga` já vem como `"Aberta"`/`"Fechada"` em vez do código bruto de `DAK_ACECAR`. O `CASE` de ambos tem `ELSE`, então nenhum dos dois é nulo. Isso evita que cada client desktop precise reclassificar essas colunas linha a linha depois de carregar os dados.
@@ -181,11 +181,14 @@ Assim como `select_cargas.sql`, os campos `caminhao` e `status_carga` já vêm f
 O gargalo real, se `/cargas/` estiver lento, tende a estar em falta de índice nas tabelas do Protheus (que esta API não gerencia — são de responsabilidade de quem administra o SQL Server), não na forma da query. Índices recomendados, mapeados às colunas usadas em `JOIN`/`WHERE`/`ORDER BY` desta consulta:
 
 ```sql
--- DAI070: filtro de data + flag de exclusão + ordenação da paginação
-CREATE INDEX IX_DAI070_Cargas ON DAI070 (D_E_L_E_T_, DAI_DATA) INCLUDE (DAI_FILIAL, DAI_COD, DAI_SEQCAR, DAI_SEQUEN, DAI_PERCUR, DAI_CLIENT, DAI_LOJA, DAI_SERIE, DAI_NFISCA, DAI_PEDIDO, DAI_PESO);
+-- DAK070: filtro de data (DAK_DATA, mais seletivo aqui do que em DAI070 —
+-- uma linha por veículo/sequência de carga, não por item) + flag de
+-- exclusão. Colunas de join/status incluídas para cobrir a consulta.
+CREATE INDEX IX_DAK070_Cargas ON DAK070 (D_E_L_E_T_, DAK_DATA) INCLUDE (DAK_FILIAL, DAK_COD, DAK_SEQCAR, DAK_ACECAR, DAK_CAMINH, DAK_MOTORI);
 
--- DAK070: join com DAI070 + filtro de status
-CREATE INDEX IX_DAK070_Cargas ON DAK070 (DAK_FILIAL, DAK_COD, DAK_SEQCAR) INCLUDE (D_E_L_E_T_, DAK_ACECAR, DAK_CAMINH, DAK_MOTORI);
+-- DAI070: sem filtro de data (migrou para DAK070); flag de exclusão +
+-- sequência cancelada, e as colunas de join/ordenação/saída.
+CREATE INDEX IX_DAI070_Cargas ON DAI070 (D_E_L_E_T_, DAI_SEQUEN) INCLUDE (DAI_FILIAL, DAI_COD, DAI_SEQCAR, DAI_DATA, DAI_PERCUR, DAI_CLIENT, DAI_LOJA, DAI_SERIE, DAI_NFISCA, DAI_PEDIDO, DAI_PESO);
 
 -- SE1070: subquery correlacionada de valor (só roda para a página, mas se
 -- beneficia de um seek em vez de scan por linha)

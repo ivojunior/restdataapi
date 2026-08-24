@@ -26,6 +26,9 @@ def _veiculo(**overrides):
         filial="01",
         codigo="000001",
         sequencia_carga="001",
+        # data_inicial/data_final filtram por VeiculoCarga.data (DAK_DATA),
+        # não ItemCarga.data — ver app/routers/cargas.py.
+        data=date.today().strftime("%Y%m%d"),
         caminhao="ABC1234",
         status="1",
         motorista="M0001",
@@ -276,10 +279,10 @@ def test_filtro_data_final_via_query_string(client, auth_headers, db_session):
     db_session.add_all(
         [
             _cliente(),
-            _veiculo(codigo="000001", sequencia_carga="001"),
-            _item(codigo="000001", sequencia_carga="001", data="20260805"),
-            _veiculo(codigo="000002", sequencia_carga="001"),
-            _item(codigo="000002", sequencia_carga="001", data="20260815"),
+            _veiculo(codigo="000001", sequencia_carga="001", data="20260805"),
+            _item(codigo="000001", sequencia_carga="001"),
+            _veiculo(codigo="000002", sequencia_carga="001", data="20260815"),
+            _item(codigo="000002", sequencia_carga="001"),
             _percurso(),
         ]
     )
@@ -290,6 +293,30 @@ def test_filtro_data_final_via_query_string(client, auth_headers, db_session):
     dados = resposta.json()
     assert len(dados["items"]) == 1
     assert dados["items"][0]["codigo"] == "000001"
+
+
+def test_filtro_data_usa_veiculo_nao_item(client, auth_headers, db_session):
+    # data_inicial/data_final filtram por VeiculoCarga.data (DAK_DATA), não
+    # ItemCarga.data (DAI_DATA) — o campo `data` retornado no item continua
+    # vindo de DAI070; só o predicado do filtro migrou de tabela (ver
+    # app/routers/cargas.py). DAI_DATA do item aqui está bem fora do período
+    # pedido; se o filtro estivesse (por engano) em ItemCarga.data, esta
+    # carga não apareceria.
+    db_session.add_all(
+        [
+            _cliente(),
+            _veiculo(data="20260805"),
+            _item(data="20250101"),
+            _percurso(),
+        ]
+    )
+    db_session.commit()
+
+    resposta = client.get(
+        "/cargas/?data_inicial=20260801&data_final=20260810", headers=auth_headers)
+    dados = resposta.json()
+    assert len(dados["items"]) == 1
+    assert dados["items"][0]["data"] == "20250101"
 
 
 def test_item_sem_veiculo_correspondente_e_ignorado(client, auth_headers, db_session):
@@ -330,10 +357,10 @@ def test_sem_filtro_assume_data_atual(client, auth_headers, db_session):
     db_session.add_all(
         [
             _cliente(),
-            _veiculo(codigo="000001", sequencia_carga="001"),
-            _item(codigo="000001", sequencia_carga="001", data=ontem),
-            _veiculo(codigo="000002", sequencia_carga="001"),
-            _item(codigo="000002", sequencia_carga="001", data=hoje),
+            _veiculo(codigo="000001", sequencia_carga="001", data=ontem),
+            _item(codigo="000001", sequencia_carga="001"),
+            _veiculo(codigo="000002", sequencia_carga="001", data=hoje),
+            _item(codigo="000002", sequencia_carga="001"),
             _percurso(),
         ]
     )
@@ -349,10 +376,10 @@ def test_filtro_data_inicial_via_query_string(client, auth_headers, db_session):
     db_session.add_all(
         [
             _cliente(),
-            _veiculo(codigo="000001", sequencia_carga="001"),
-            _item(codigo="000001", sequencia_carga="001", data="20260101"),
-            _veiculo(codigo="000002", sequencia_carga="001"),
-            _item(codigo="000002", sequencia_carga="001", data="20260801"),
+            _veiculo(codigo="000001", sequencia_carga="001", data="20260101"),
+            _item(codigo="000001", sequencia_carga="001"),
+            _veiculo(codigo="000002", sequencia_carga="001", data="20260801"),
+            _item(codigo="000002", sequencia_carga="001"),
             _percurso(),
         ]
     )
