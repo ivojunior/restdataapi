@@ -19,7 +19,7 @@ target_metadata = Base.metadata
 # O Alembic nunca deve gerar CREATE/ALTER/DROP para elas, mesmo em --autogenerate.
 TABELAS_EXTERNAS = {
     "SE2070", "SA2070", "SB2070", "SB1000", "PA6000", "DAI070", "DAK070",
-    "SA1070", "SE1070", "DA4070",
+    "SA1070", "SE1070", "DA4070", "SD2070",
 }
 
 

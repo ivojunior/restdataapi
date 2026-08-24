@@ -13,7 +13,10 @@ from app.config import settings
 
 logger = logging.getLogger("restdataapi")
 
-from app.routers import cargas, financeiro, fornecedores, produtos, saldos_estoque, titulos_pagar
+from app.routers import (
+    cargas, faturamento, financeiro, fornecedores, produtos, saldos_estoque,
+    titulos_pagar,
+)
 
 app = FastAPI(
     title="RestDataAPI",
@@ -47,6 +50,7 @@ app.include_router(saldos_estoque.router)
 app.include_router(produtos.router)
 app.include_router(financeiro.router)
 app.include_router(cargas.router)
+app.include_router(faturamento.router)
 
 
 @app.exception_handler(SQLAlchemyError)

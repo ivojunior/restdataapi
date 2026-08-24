@@ -43,6 +43,8 @@ Atualmente a API só lê tabelas que já existem em outro sistema (o Protheus). 
 - **Cliente** (tabela `SA1070` — Clientes): `rec_no (R_E_C_N_O_), filial, codigo, loja, nome, bairro, municipio`. Usada apenas como apoio (join) no relatório `/cargas/`, sem rota própria.
 - **NotaFiscalSaida** (tabela `SE1070` — Notas Fiscais de Saída): `rec_no (R_E_C_N_O_), filial, prefixo, numero, cliente, loja, valor, carga, sequencia_carga`. Usada apenas como apoio (subconsulta correlacionada) no relatório `/cargas/`, para obter o valor da carga, sem rota própria.
 - **Motorista** (tabela `DA4070` — Motoristas): `rec_no (R_E_C_N_O_), filial, codigo, nome`. Usada apenas como apoio (join opcional/`LEFT JOIN`) no relatório `/cargas/`, para obter o nome do motorista (`DAK_MOTORI`) do veículo, sem rota própria.
+- **ItemFaturamento** (tabela `SD2070` — Notas Fiscais de Saída, Itens): `rec_no (R_E_C_N_O_), filial, emissao, codigo_produto, operacao, quantidade, total, custo`. Tabela principal do relatório `/faturamento/`. Não confundir com **NotaFiscalSaida** (`SE1070`), tabela diferente usada só no relatório de cargas. `operacao` (`D2_YOPER`) é uma customização desta instalação — veja `/faturamento/` abaixo.
+  - `emissao` é string `AAAAMMDD`, como as demais datas do Protheus expostas por esta API.
 
 Para todas:
 - Registros com `D_E_L_E_T_ = '*'` (exclusão lógica do Protheus) são sempre filtrados pela API, tanto na listagem quanto na busca por id.
@@ -126,6 +128,7 @@ Todos os endpoints são `GET` — não existem rotas `POST`, `PUT` ou `DELETE`.
 | GET    | `/financeiro/`                     | Relatório financeiro (réplica de `select_financeiro.sql`): títulos a pagar (SE2070) com fornecedor (SA2070) e descrição do tipo de operação (PA6000); filtra por `vencimento_de`/`vencimento_ate` |
 | GET    | `/saldos-estoque/`                 | Relatório de saldo de estoque (baseado em `select_estoque_produtos.sql`): saldos (SB2070) com descrição e fator de conversão do produto (SB1000); filtra por `tipo_produto`/`local` |
 | GET    | `/cargas/`                         | Relatório de cargas (baseado em `select_cargas.sql`): itens de carga (DAI070) com veículo (DAK070), cliente (SA1070, com bairro/município) e valor da nota fiscal (SE1070) e, opcionalmente, motorista (DA4070); filtra por `data_inicial`/`data_final`/`status` |
+| GET    | `/faturamento/`                    | Relatório de faturamento (baseado em `select_faturamento.sql`): notas fiscais de saída (SD2070) de produtos acabados (SB1000, `B1_TIPO='PA'`), agregadas por filial/dia do mês/produto; filtra por `data_inicial`/`data_final` |
 
 Parâmetros comuns de listagem: `skip`, `limit` (paginação), `order_by` (ex.: `nome` ou `-criado_em` para ordem decrescente) e filtros por campo (ex.: `?filial=01`).
 
@@ -199,6 +202,27 @@ CREATE INDEX IX_SE1070_Cargas ON SE1070 (E1_FILIAL, E1_CLIENTE, E1_LOJA, E1_PREF
 Suporta apenas paginação (`skip`, `limit`) e os filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
 
 O client desktop deste endpoint é `client/app_cargas.py` (veja "Clients desktop" abaixo).
+
+### `/faturamento/`
+
+Baseado no `SELECT` de `select_faturamento.sql`: uma agregação em **duas camadas**. A subconsulta interna calcula, por linha de `SD2070` (item de nota fiscal de saída), a quantidade vendida (`QTDE`), o faturamento bruto (`D2_TOTAL`) e o lucro bruto (`D2_TOTAL - D2_CUSTO1`), sempre juntando com `SB1000` (produto, join obrigatório por filial/código — `B1_FILIAL = '  '`, `B1_TIPO = 'PA'`: só produtos acabados; item sem produto correspondente do tipo `PA` não aparece). A consulta externa soma tudo por **filial, dia do mês e produto**. Réplica exata dessa estrutura de duas camadas no SQLAlchemy (`app/routers/faturamento.py`), em vez de agregar tudo de uma vez — achatar as duas camadas mudaria a semântica de `preco_medio` (veja abaixo). Aplica como regra de negócio fixa (sempre ativa):
+
+- Apenas itens não excluídos (`D_E_L_E_T_ != '*'`);
+- Apenas produtos do tipo `PA` (produto acabado);
+- Apenas os tipos de operação (`D2_YOPER`, customização desta instalação do Protheus) `501` (venda) e `542`/`543`/`544` (devolução) — outros tipos são ignorados.
+
+Para itens com `D2_YOPER = '542'/'543'/'544'` (devolução), a quantidade (`quantidade`) entra como **zero** — a consulta original não subtrai a quantidade devolvida, só deixa de somá-la. `faturamento` e `lucro_bruto`, porém, continuam somando o valor da devolução (tipicamente negativo em `D2_TOTAL`/`D2_CUSTO1`, convenção do Protheus), então uma devolução reduz o faturamento/lucro do grupo sem alterar a quantidade vendida reportada.
+
+**`dia` é o dia do mês da emissão (`DAY(D2_EMISSAO)`, 1 a 31) — não uma data completa.** Se o período (`data_inicial`/`data_final`) atravessar mais de um mês, dias iguais de meses diferentes são somados no mesmo grupo (ex.: vendas do dia 5 de janeiro e do dia 5 de fevereiro aparecem juntas como um único "dia 5"). Comportamento herdado de `select_faturamento.sql`, não uma escolha desta API.
+
+- `data_inicial` (opcional): filtra pela emissão da nota (`D2_EMISSAO`, formato `AAAAMMDD`), trazendo apenas itens com `emissao >= data_inicial`. Sem o parâmetro, assume a data atual do sistema.
+- `data_final` (opcional): filtra por `emissao <= data_final`. Sem o parâmetro, não há limite superior.
+
+`preco_medio` replica `AVG(D2_TOTAL/(D2_QUANT/B1_CONV))` calculado **duas vezes** (uma dentro de cada camada) — a consulta original já faz isso; o `GROUP BY` da camada interna agrupa por praticamente todas as colunas diferenciadoras, então normalmente equivale à razão de uma única linha, mas fica sujeito à mesma sensibilidade a duplicatas em `SD2070` que a consulta original tem.
+
+> **Risco conhecido, herdado da consulta original:** `margem` é `(SUM(lucro_bruto) / SUM(faturamento)) * 100`, sem proteção contra divisão por zero. Se um grupo (filial/dia/produto) tiver faturamento total zero — por exemplo, só devoluções sem nenhuma venda no período —, o SQL Server lança um erro de divisão por zero e a requisição falha com `500`. Não foi corrigido aqui (não testável contra SQLite, que não reproduz esse erro — divide por zero retorna `NULL` em vez de lançar exceção) para não alterar o comportamento de `select_faturamento.sql` sem confirmação; se isso acontecer na prática, a correção é envolver o denominador em `NULLIF(SUM(faturamento), 0)`.
+
+Suporta apenas paginação (`skip`, `limit`) e os dois filtros de data acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha (o resultado já é agregado).
 
 ## Clients desktop
 
