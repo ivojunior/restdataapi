@@ -20,3 +20,5 @@ class Cliente(Base):
     codigo = Column("A1_COD", String(6))
     loja = Column("A1_LOJA", String(3))
     nome = Column("A1_NOME", String(40))
+    bairro = Column("A1_BAIRRO", String(30))
+    municipio = Column("A1_MUN", String(20))

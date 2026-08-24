@@ -4,7 +4,6 @@ from app.models.cliente import Cliente
 from app.models.item_carga import ItemCarga
 from app.models.motorista import Motorista
 from app.models.nota_fiscal_saida import NotaFiscalSaida
-from app.models.percurso import Percurso
 from app.models.veiculo_carga import VeiculoCarga
 
 
@@ -15,6 +14,8 @@ def _cliente(**overrides):
         codigo="000456",
         loja="01",
         nome="Cliente Exemplo Ltda",
+        bairro="Centro",
+        municipio="Sao Paulo",
     )
     dados.update(overrides)
     return Cliente(**dados)
@@ -45,7 +46,6 @@ def _item(**overrides):
         sequencia_carga="001",
         sequencia="000001",
         data=date.today().strftime("%Y%m%d"),
-        percurso="0001",
         pedido="000123",
         cliente="000456",
         loja="01",
@@ -55,17 +55,6 @@ def _item(**overrides):
     )
     dados.update(overrides)
     return ItemCarga(**dados)
-
-
-def _percurso(**overrides):
-    dados = dict(
-        deletado=" ",
-        filial="01",
-        codigo="0001",
-        descricao="Rota Padrão",
-    )
-    dados.update(overrides)
-    return Percurso(**dados)
 
 
 def _motorista(**overrides):
@@ -102,9 +91,7 @@ def test_requer_api_key(client):
 
 
 def test_lista_com_join_de_veiculo_e_cliente(client, auth_headers, db_session):
-    db_session.add_all(
-        [_cliente(), _veiculo(), _item(), _nota_fiscal(), _percurso(), _motorista()]
-    )
+    db_session.add_all([_cliente(), _veiculo(), _item(), _nota_fiscal(), _motorista()])
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
@@ -114,11 +101,12 @@ def test_lista_com_join_de_veiculo_e_cliente(client, auth_headers, db_session):
     item = dados["items"][0]
     assert item["codigo"] == "000001"
     assert item["nome_cliente"] == "Cliente Exemplo Ltda"
+    assert item["bairro_cliente"] == "Centro"
+    assert item["municipio_cliente"] == "Sao Paulo"
     assert item["caminhao"] == "ABC1234"
-    # status "1" está em _STATUS_CARGA_ABERTOS -> case() classifica como "Aberta".
+    # status "1" não está em ('7','8') -> case() com ELSE classifica como "Aberta".
     assert item["status_carga"] == "Aberta"
     assert item["valor"] == "1500.00"
-    assert item["descricao_percurso"] == "Rota Padrão"
     assert item["motorista"] == "Motorista Exemplo"
 
 
@@ -131,7 +119,6 @@ def test_caminhao_placa_cliente_e_status_fechada_sao_formatados(client, auth_hea
             _cliente(),
             _veiculo(caminhao="KHA0902", status="8"),
             _item(),
-            _percurso(),
         ]
     )
     db_session.commit()
@@ -143,23 +130,10 @@ def test_caminhao_placa_cliente_e_status_fechada_sao_formatados(client, auth_hea
     assert dados["items"][0]["status_carga"] == "Fechada"
 
 
-def test_item_sem_percurso_correspondente_ainda_aparece(client, auth_headers, db_session):
-    # DA5070 (percurso) é LEFT JOIN em select_cargas.sql: item sem percurso
-    # cadastrado continua aparecendo, só com descricao_percurso nulo (não é
-    # mais excluído como uma versão anterior desta query fazia).
-    db_session.add_all([_cliente(), _veiculo(), _item()])
-    db_session.commit()
-
-    resposta = client.get("/cargas/", headers=auth_headers)
-    dados = resposta.json()
-    assert len(dados["items"]) == 1
-    assert dados["items"][0]["descricao_percurso"] is None
-
-
 def test_item_sem_motorista_correspondente_ainda_aparece(client, auth_headers, db_session):
-    # DA4070 (motorista) também é LEFT JOIN: sem motorista cadastrado no
-    # veículo, o item aparece normalmente com motorista nulo.
-    db_session.add_all([_cliente(), _veiculo(), _item(), _percurso()])
+    # DA4070 (motorista) é LEFT JOIN: sem motorista cadastrado no veículo, o
+    # item aparece normalmente com motorista nulo.
+    db_session.add_all([_cliente(), _veiculo(), _item()])
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
@@ -178,7 +152,6 @@ def test_valor_vem_da_nota_fiscal_nao_do_veiculo(client, auth_headers, db_sessio
             _item(serie="2", nota_fiscal="000999"),
             _nota_fiscal(prefixo="2", numero="000999", valor="777.77"),
             _nota_fiscal(prefixo="1", numero="000789", valor="1500.00"),  # não deve casar
-            _percurso(),
         ]
     )
     db_session.commit()
@@ -190,7 +163,7 @@ def test_valor_vem_da_nota_fiscal_nao_do_veiculo(client, auth_headers, db_sessio
 
 
 def test_valor_e_zero_sem_nota_fiscal_correspondente(client, auth_headers, db_session):
-    db_session.add_all([_cliente(), _veiculo(), _item(), _percurso()])
+    db_session.add_all([_cliente(), _veiculo(), _item()])
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
@@ -209,7 +182,6 @@ def test_filtro_status_encerrada_agrupa_codigos_7_e_8(client, auth_headers, db_s
             _item(codigo="000002", sequencia_carga="001"),
             _veiculo(codigo="000003", sequencia_carga="001", status="8"),
             _item(codigo="000003", sequencia_carga="001"),
-            _percurso(),
         ]
     )
     db_session.commit()
@@ -230,7 +202,6 @@ def test_filtro_status_aberta_agrupa_demais_codigos(client, auth_headers, db_ses
             _item(codigo="000002", sequencia_carga="001"),
             _veiculo(codigo="000003", sequencia_carga="001", status="7"),
             _item(codigo="000003", sequencia_carga="001"),
-            _percurso(),
         ]
     )
     db_session.commit()
@@ -283,7 +254,6 @@ def test_filtro_data_final_via_query_string(client, auth_headers, db_session):
             _item(codigo="000001", sequencia_carga="001"),
             _veiculo(codigo="000002", sequencia_carga="001", data="20260815"),
             _item(codigo="000002", sequencia_carga="001"),
-            _percurso(),
         ]
     )
     db_session.commit()
@@ -307,7 +277,6 @@ def test_filtro_data_usa_veiculo_nao_item(client, auth_headers, db_session):
             _cliente(),
             _veiculo(data="20260805"),
             _item(data="20250101"),
-            _percurso(),
         ]
     )
     db_session.commit()
@@ -320,7 +289,7 @@ def test_filtro_data_usa_veiculo_nao_item(client, auth_headers, db_session):
 
 
 def test_item_sem_veiculo_correspondente_e_ignorado(client, auth_headers, db_session):
-    db_session.add_all([_cliente(), _item(), _percurso()])
+    db_session.add_all([_cliente(), _item()])
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
@@ -328,7 +297,7 @@ def test_item_sem_veiculo_correspondente_e_ignorado(client, auth_headers, db_ses
 
 
 def test_item_sem_cliente_correspondente_e_ignorado(client, auth_headers, db_session):
-    db_session.add_all([_veiculo(), _item(), _percurso()])
+    db_session.add_all([_veiculo(), _item()])
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
@@ -336,7 +305,7 @@ def test_item_sem_cliente_correspondente_e_ignorado(client, auth_headers, db_ses
 
 
 def test_sequencia_cancelada_e_ignorada(client, auth_headers, db_session):
-    db_session.add_all([_cliente(), _veiculo(), _item(sequencia="999999"), _percurso()])
+    db_session.add_all([_cliente(), _veiculo(), _item(sequencia="999999")])
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
@@ -344,7 +313,7 @@ def test_sequencia_cancelada_e_ignorada(client, auth_headers, db_session):
 
 
 def test_registros_deletados_sao_ignorados(client, auth_headers, db_session):
-    db_session.add_all([_cliente(), _veiculo(), _item(deletado="*"), _percurso()])
+    db_session.add_all([_cliente(), _veiculo(), _item(deletado="*")])
     db_session.commit()
 
     resposta = client.get("/cargas/", headers=auth_headers)
@@ -361,7 +330,6 @@ def test_sem_filtro_assume_data_atual(client, auth_headers, db_session):
             _item(codigo="000001", sequencia_carga="001"),
             _veiculo(codigo="000002", sequencia_carga="001", data=hoje),
             _item(codigo="000002", sequencia_carga="001"),
-            _percurso(),
         ]
     )
     db_session.commit()
@@ -380,7 +348,6 @@ def test_filtro_data_inicial_via_query_string(client, auth_headers, db_session):
             _item(codigo="000001", sequencia_carga="001"),
             _veiculo(codigo="000002", sequencia_carga="001", data="20260801"),
             _item(codigo="000002", sequencia_carga="001"),
-            _percurso(),
         ]
     )
     db_session.commit()

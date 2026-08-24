@@ -21,7 +21,6 @@ class ItemCarga(Base):
     sequencia_carga = Column("DAI_SEQCAR", String(2))
     sequencia = Column("DAI_SEQUEN", String(6))
     data = Column("DAI_DATA", String(8))
-    percurso = Column("DAI_PERCUR", String(6))
     pedido = Column("DAI_PEDIDO", String(6))
     cliente = Column("DAI_CLIENT", String(6))
     loja = Column("DAI_LOJA", String(2))

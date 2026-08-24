@@ -12,7 +12,6 @@ from app.models.cliente import Cliente
 from app.models.item_carga import ItemCarga
 from app.models.motorista import Motorista
 from app.models.nota_fiscal_saida import NotaFiscalSaida
-from app.models.percurso import Percurso
 from app.models.veiculo_carga import VeiculoCarga
 from app.schemas.carga import CargaRead
 from app.schemas.common import PaginatedResponse
@@ -139,7 +138,6 @@ def _query_cargas(
             ItemCarga.filial,
             ItemCarga.codigo,
             ItemCarga.data,
-            Percurso.descricao,
             ItemCarga.pedido,
             Motorista.nome,
             ItemCarga.cliente,
@@ -148,6 +146,8 @@ def _query_cargas(
             caminhao_coluna,
             status_coluna,
             Cliente.nome,
+            Cliente.bairro,
+            Cliente.municipio,
             valor_coluna,
         )
         .join(
@@ -168,18 +168,10 @@ def _query_cargas(
                 Cliente.loja == ItemCarga.loja,
             ),
         )
-        # Diferente de uma versão anterior desta query, DA5070 (percurso) e
-        # DA4070 (motorista) agora são LEFT JOIN em select_cargas.sql — itens
-        # sem percurso/motorista cadastrado continuam aparecendo, só com
-        # descricao_percurso/motorista nulos, em vez de serem excluídos.
-        .outerjoin(
-            Percurso,
-            and_(
-                Percurso.deletado != "*",
-                Percurso.filial == ItemCarga.filial,
-                Percurso.codigo == ItemCarga.percurso,
-            ),
-        )
+        # DA4070 (motorista) é LEFT JOIN em select_cargas.sql — veículo sem
+        # motorista cadastrado continua aparecendo, só com motorista nulo.
+        # DA5070 (percurso) saiu da consulta nesta versão de select_cargas.sql
+        # (nem o join nem a descrição são mais usados).
         .outerjoin(
             Motorista,
             and_(
@@ -261,11 +253,12 @@ def listar_cargas(
             filial=filial,
             codigo=codigo,
             data=data,
-            descricao_percurso=descricao_percurso,
             pedido=pedido,
             motorista=motorista,
             cliente=cliente,
             nome_cliente=nome_cliente,
+            bairro_cliente=bairro_cliente,
+            municipio_cliente=municipio_cliente,
             peso=peso,
             nota_fiscal=nota_fiscal,
             caminhao=caminhao,
@@ -273,8 +266,9 @@ def listar_cargas(
             valor=valor,
         )
         for (
-            filial, codigo, data, descricao_percurso, pedido, motorista, cliente,
-            peso, nota_fiscal, caminhao, status_carga, nome_cliente, valor,
+            filial, codigo, data, pedido, motorista, cliente, peso, nota_fiscal,
+            caminhao, status_carga, nome_cliente, bairro_cliente, municipio_cliente,
+            valor,
         ) in linhas
     ]
 

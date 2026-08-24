@@ -10,16 +10,17 @@ class CargaRead(BaseModel):
     filial: str
     codigo: str
     data: str
-    # Só a descrição do percurso é exposta (select_cargas.sql não seleciona
-    # mais DAI_PERCUR, só DA5_DESC); join com DA5070 é opcional (LEFT JOIN),
-    # então vem None quando o item não tem percurso cadastrado.
-    descricao_percurso: Optional[str] = None
     pedido: str
     # Nome do motorista (DA4_NOME, join opcional com DA4070 via DAK_MOTORI);
     # None quando o veículo não tem motorista cadastrado.
     motorista: Optional[str] = None
     cliente: str
     nome_cliente: Optional[str] = None
+    # Bairro/município do cliente (A1_BAIRRO/A1_MUN, SA1070) — mesmo join
+    # obrigatório de nome_cliente, então só vêm None se o próprio campo
+    # estiver vazio no cadastro do Protheus.
+    bairro_cliente: Optional[str] = None
+    municipio_cliente: Optional[str] = None
     peso: Decimal
     nota_fiscal: str
     # Já vêm formatados pela API (case do SQL/SQLAlchemy — ver
