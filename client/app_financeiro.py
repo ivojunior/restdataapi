@@ -416,6 +416,10 @@ class FinanceiroApp:
         self._nb.add(tab_evolucao, text="  Evolução Mensal  ")
         self._build_evolucao_tab(tab_evolucao)
 
+        tab_dia = ttk.Frame(self._nb)
+        self._nb.add(tab_dia, text="  Total por Dia  ")
+        self._build_dia_tab(tab_dia)
+
         tab_filial = ttk.Frame(self._nb)
         self._nb.add(tab_filial, text="  Por Filial  ")
         self._build_filial_tab(tab_filial)
@@ -541,6 +545,18 @@ class FinanceiroApp:
         self._canvas_evolucao = FigureCanvasTkAgg(self._fig_evolucao, master=chart_frame)
         self._canvas_evolucao.get_tk_widget().pack(fill="both", expand=True)
         self._draw_empty_ax(self._ax_evolucao, self._canvas_evolucao)
+
+    def _build_dia_tab(self, parent: ttk.Frame) -> None:
+        cols = [
+            ("dia",      "Data",          95, "c"),
+            ("aberto",   "A Pagar (R$)", 130, "e"),
+            ("vencido",  "Vencido (R$)", 130, "e"),
+            ("baixado",  "Baixado (R$)", 130, "e"),
+            ("total",    "Total (R$)",   130, "e"),
+        ]
+        self._tree_dia = self._build_summary_table(parent, cols, height=10)
+        self._fig_dia, self._ax_dia, self._canvas_dia = self._build_summary_chart(parent)
+        self._draw_empty_ax(self._ax_dia, self._canvas_dia)
 
     # ── barra de status ───────────────────────────────────────────────────────
 
@@ -697,6 +713,7 @@ class FinanceiroApp:
         self._update_table()
         self._update_categoria_view()
         self._update_evolucao_view()
+        self._update_dia_view()
         self._update_filial_view()
 
     def _apply_filters(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -1035,6 +1052,67 @@ class FinanceiroApp:
         ax.legend(fontsize=9, loc="upper left", ncol=3, framealpha=0.85)
         self._canvas_evolucao.draw()
 
+    def _update_dia_view(self) -> None:
+        tree, ax, canvas = self._tree_dia, self._ax_dia, self._canvas_dia
+        for row in tree.get_children():
+            tree.delete(row)
+
+        df = self._df
+        if df is None or df.empty:
+            self._draw_empty_ax(ax, canvas)
+            return
+
+        # "Em aberto"/"Vencido" somam saldo (o que ainda falta pagar);
+        # "Baixado" soma valor (já foi pago — saldo normalmente já é 0) —
+        # mesma convenção usada em _update_kpis().
+        #
+        # Sem .tail() aqui, de propósito: diferente dos gráficos de "últimos
+        # N meses/dias" (que cortariam pelo lado errado — a ordenação é
+        # ascendente, então um corte cortaria os vencimentos mais FUTUROS,
+        # não os mais antigos), o volume de dias já é controlado pelos
+        # filtros de período (Vencimento De/Até) que o usuário já usa para
+        # carregar os dados — mesmo padrão sem limite de "Evolução Mensal".
+        valor_status = df["valor"].where(df["status"] == "Baixado", df["saldo"])
+        pivot = (
+            df.assign(valor_status=valor_status)
+            .groupby(["vencimento_real", "status"])["valor_status"].sum()
+            .unstack(fill_value=0.0)
+            .reindex(columns=["Em aberto", "Vencido", "Baixado"], fill_value=0.0)
+            .sort_index()
+        )
+        pivot["Total"] = pivot[["Em aberto", "Vencido", "Baixado"]].sum(axis=1)
+
+        for dia, row in pivot.iterrows():
+            tree.insert("", "end", values=(
+                _fmt_date(dia), _brl(row["Em aberto"]), _brl(row["Vencido"]),
+                _brl(row["Baixado"]), _brl(row["Total"]),
+            ))
+        tree.insert("", "end", tags=("total",), values=(
+            "TOTAL", _brl(pivot["Em aberto"].sum()), _brl(pivot["Vencido"].sum()),
+            _brl(pivot["Baixado"].sum()), _brl(pivot["Total"].sum()),
+        ))
+
+        ax.clear()
+        dias = list(pivot.index)
+        x = range(len(dias))
+        bottom = [0.0] * len(dias)
+        for status in ("Em aberto", "Vencido", "Baixado"):
+            vals = pivot[status].tolist()
+            ax.bar(x, vals, bottom=bottom, width=0.65, edgecolor="none",
+                   color=STATUS_COLORS[status], label=status)
+            bottom = [b + v for b, v in zip(bottom, vals)]
+        ax.set_xticks(list(x))
+        ax.set_xticklabels([_fmt_date(d)[:5] for d in dias], fontsize=9,
+                           rotation=45, ha="right")
+        ax.set_title("Total por Dia — A Pagar, Vencido e Baixado (dia de vencimento)",
+                     fontsize=13, fontweight="bold", pad=12)
+        ax.set_ylabel("Valor (R$)", fontsize=10.5)
+        ax.tick_params(axis="y", labelsize=9.5)
+        ax.yaxis.set_major_formatter(self._brl_axis_fmt)
+        ax.set_facecolor("#fafafa")
+        ax.legend(fontsize=9, loc="upper left", ncol=3, framealpha=0.85)
+        canvas.draw()
+
     # ── tabela ────────────────────────────────────────────────────────────────
 
     def _update_table(self) -> None:
@@ -1133,6 +1211,7 @@ class FinanceiroApp:
         self._draw_empty_charts()
         self._update_categoria_view()
         self._update_evolucao_view()
+        self._update_dia_view()
         self._update_filial_view()
         self._progress["value"] = 0
         self._pct_var.set("")
@@ -1411,6 +1490,56 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     ctotal_geral = ws6.cell(ri, len(meses) + 2, float(pivot["Total"].sum()))
     ctotal_geral.number_format = BRL
     ctotal_geral.font = BOLD10
+
+    # ── aba 6b: Total por Dia ────────────────────────────────────────────────
+    ws6b = wb.create_sheet("Total por Dia")
+    ws6b.cell(1, 1, "Total por Dia — A Pagar, Vencido e Baixado").font = Font(
+        bold=True, color="1A5276", size=13, name="Calibri")
+    ws6b.cell(2, 1, "Valores por dia de vencimento (\"Em aberto\"/\"Vencido\" somam "
+              "saldo; \"Baixado\" soma valor)").font = Font(
+        italic=True, size=9, color="7F8C8D", name="Calibri")
+
+    # Sem o .tail(30) do gráfico da tela (essa aba mostra o período completo
+    # carregado — mesmo padrão da aba "Evolução Mensal" acima).
+    valor_status_dia = df["valor"].where(df["status"] == "Baixado", df["saldo"])
+    pivot_dia = (
+        df.assign(valor_status=valor_status_dia)
+        .groupby(["vencimento_real", "status"])["valor_status"].sum()
+        .unstack(fill_value=0.0)
+        .reindex(columns=["Em aberto", "Vencido", "Baixado"], fill_value=0.0)
+        .sort_index()
+    )
+    pivot_dia["Total"] = pivot_dia[["Em aberto", "Vencido", "Baixado"]].sum(axis=1)
+
+    hdr_row6b = 4
+    hdrs6b = ["Data", "A Pagar (R$)", "Vencido (R$)", "Baixado (R$)", "Total (R$)"]
+    widths6b = [13, 16, 16, 16, 16]
+    for ci, (h, w) in enumerate(zip(hdrs6b, widths6b), 1):
+        _hdr(ws6b, hdr_row6b, ci, h)
+        ws6b.column_dimensions[get_column_letter(ci)].width = w
+    ws6b.freeze_panes = f"A{hdr_row6b + 1}"
+
+    ri = hdr_row6b + 1
+    for dia, row in pivot_dia.iterrows():
+        ws6b.cell(ri, 1, _fmt_date(dia))
+        for ci, status in enumerate(("Em aberto", "Vencido", "Baixado"), 2):
+            c = ws6b.cell(ri, ci, float(row[status]))
+            c.number_format = BRL
+        ctotal = ws6b.cell(ri, 5, float(row["Total"]))
+        ctotal.number_format = BRL
+        if (ri - hdr_row6b) % 2 == 0:
+            for ci in range(1, 6):
+                ws6b.cell(ri, ci).fill = ALT_FILL
+        ri += 1
+
+    ws6b.cell(ri, 1, "TOTAL GERAL").font = BOLD10
+    for ci, status in enumerate(("Em aberto", "Vencido", "Baixado"), 2):
+        c = ws6b.cell(ri, ci, float(pivot_dia[status].sum()))
+        c.number_format = BRL
+        c.font = BOLD10
+    ctotal_geral_dia = ws6b.cell(ri, 5, float(pivot_dia["Total"].sum()))
+    ctotal_geral_dia.number_format = BRL
+    ctotal_geral_dia.font = BOLD10
 
     # ── aba 7: Resumo por Filial ────────────────────────────────────────────
     ws7 = wb.create_sheet("Resumo por Filial")
