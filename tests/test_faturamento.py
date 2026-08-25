@@ -60,13 +60,13 @@ def test_agrega_vendas_do_mesmo_dia_produto_e_filial(client, auth_headers, db_se
     assert item["margem"] == "40.00"
 
 
-def test_bonificacao_zera_faturamento_mas_conta_na_quantidade_e_no_lucro(client, auth_headers, db_session):
+def test_bonificacao_zera_faturamento_e_conta_como_prejuizo_no_lucro(client, auth_headers, db_session):
     # select_faturamento.sql zera FATURAMENTO para bonificação (542/543/544)
     # — dar um produto de bonificação não gera receita — mas QTDE conta
-    # normalmente (sem CASE, diferente de uma versão anterior desta query,
-    # que zerava a quantidade em vez do faturamento). LUCRO_BRUTO usa
-    # D2_TOTAL bruto sem CASE nenhum, então continua refletindo o custo da
-    # bonificação mesmo com faturamento zerado.
+    # normalmente (sem CASE). LUCRO_BRUTO e PRECO_MEDIO são calculados a
+    # partir do FATURAMENTO já zerado (não mais do D2_TOTAL bruto — correção
+    # do usuário na consulta), então a bonificação contribui só com o custo
+    # (prejuízo), sem nenhuma "receita" contrapondo.
     db_session.add_all([
         _produto(),
         _item(operacao="501", quantidade=Decimal("10.0000"),
@@ -80,7 +80,11 @@ def test_bonificacao_zera_faturamento_mas_conta_na_quantidade_e_no_lucro(client,
     item = resposta.json()["items"][0]
     assert item["quantidade"] == "12.0000"
     assert item["faturamento"] == "1000.00"
-    assert item["lucro_bruto"] == "480.00"
+    # lucro_bruto = SUM(faturamento) - SUM(custo) = 1000 - (600+120) = 280
+    assert item["lucro_bruto"] == "280.00"
+    assert item["margem"] == "28.00"
+    # preco_medio = AVG(faturamento/qtde por linha) = AVG(1000/10, 0/2) = AVG(100, 0) = 50
+    assert item["preco_medio"] == "50.0"
 
 
 def test_quantidade_dividida_pela_conversao_do_produto(client, auth_headers, db_session):

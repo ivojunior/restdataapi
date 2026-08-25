@@ -39,12 +39,16 @@ def _query_faturamento(db: Session, data_inicial: str, data_final: Optional[str]
     # zera a quantidade), o faturamento (FATURAMENTO — zero para
     # bonificação, D2_TOTAL só para venda: dar um produto de bonificação não
     # gera receita, mas continua contando na quantidade movimentada) e o
-    # lucro bruto (D2_TOTAL - D2_CUSTO1, sempre, sem CASE — usa o D2_TOTAL
-    # bruto mesmo para bonificação); a consulta externa soma tudo por
-    # filial/dia/produto. DIA é DAY(D2_EMISSAO) — dia do mês, não uma data
-    # completa: se o período (data_inicial/data_final) atravessar mais de um
-    # mês, dias iguais de meses diferentes somam juntos no mesmo grupo,
-    # exatamente como a consulta original faz.
+    # custo (CUSTO_MEDIO — SUM(D2_CUSTO1); a consulta externa soma tudo por
+    # filial/dia/produto e só então calcula PRECO_MEDIO e LUCRO_BRUTO a
+    # partir do FATURAMENTO já zerado, e não mais do D2_TOTAL bruto (correção
+    # do usuário nesta consulta — antes o lucro bruto usava D2_TOTAL bruto
+    # mesmo para bonificação, o que dava lucro positivo mesmo quando o
+    # faturamento reportado era zero; agora bonificação sempre gera lucro
+    # bruto negativo, igual ao custo do produto dado). DIA é DAY(D2_EMISSAO)
+    # — dia do mês, não uma data completa: se o período (data_inicial/
+    # data_final) atravessar mais de um mês, dias iguais de meses diferentes
+    # somam juntos no mesmo grupo, exatamente como a consulta original faz.
     # literal_column("7")/("2") em vez de inteiros Python simples: o
     # SQLAlchemy compilaria 7 e 2 como parâmetros ligados (?), e cada
     # ocorrência desta expressão no SQL final (uma na lista de colunas, outra
@@ -85,16 +89,12 @@ def _query_faturamento(db: Session, data_inicial: str, data_final: Optional[str]
             Produto.descricao.label("descricao"),
             qtde_coluna.label("qtde"),
             faturamento_coluna.label("faturamento"),
-            # PRECO_MEDIO já é um AVG() dentro da subconsulta original — o
-            # GROUP BY interno agrupa por praticamente todas as colunas
-            # diferenciadoras, então normalmente é a razão de uma única
-            # linha; preservado como AVG() para bater exatamente com
-            # select_faturamento.sql, caso existam linhas com os mesmos
-            # valores em SD2070.
-            func.avg(
-                ItemFaturamento.total / (ItemFaturamento.quantidade / Produto.conversao)
-            ).label("preco_medio"),
-            (ItemFaturamento.total - ItemFaturamento.custo).label("lucro_bruto"),
+            # SUM() em vez de referência direta à coluna: select_faturamento.sql
+            # escreve como SUM(D2.D2_CUSTO1) mesmo D2_CUSTO1 já estando no
+            # GROUP BY interno (logo, não há o que somar de fato — cada grupo
+            # já corresponde a uma única combinação de valores). Preservado
+            # como SUM() só para bater exatamente com a consulta original.
+            func.sum(ItemFaturamento.custo).label("custo_medio"),
         )
         .join(
             Produto,
@@ -131,15 +131,24 @@ def _query_faturamento(db: Session, data_inicial: str, data_final: Optional[str]
 
     tmp = inner.subquery()
 
-    # ATENÇÃO: margem divide por SUM(faturamento) sem proteção contra zero —
-    # igual à consulta original. Agora que faturamento é zerado para
-    # bonificação (veja faturamento_coluna acima), um grupo (filial/dia/
-    # produto) com só bonificação e nenhuma venda no período sempre tem
-    # faturamento total zero — mais fácil de acontecer na prática do que
-    # antes. Nesse caso o SQL Server lança "Divide by zero error" e a
-    # requisição falha com 500.
+    # PRECO_MEDIO e LUCRO_BRUTO não vêm mais prontos da subconsulta interna
+    # (que só expõe qtde/faturamento/custo_medio por linha): são calculados
+    # aqui em cima, a partir do FATURAMENTO já zerado para bonificação — não
+    # do D2_TOTAL bruto. Correção do usuário em select_faturamento.sql: antes
+    # PRECO_MEDIO usava D2_TOTAL/QTDE e LUCRO_BRUTO usava D2_TOTAL-D2_CUSTO1,
+    # os dois ignorando a zeragem de bonificação; agora ambos usam
+    # TMP.FATURAMENTO (já zerado), então uma linha de bonificação contribui
+    # com preço médio 0 e lucro bruto = -custo (prejuízo igual ao custo do
+    # produto dado), consistente com o faturamento reportado como zero.
+    #
+    # ATENÇÃO: margem (e agora também preco_medio) dividem por
+    # SUM(faturamento)/qtde sem proteção contra zero — igual à consulta
+    # original. Um grupo (filial/dia/produto) com só bonificação e nenhuma
+    # venda no período sempre tem faturamento total zero, e o SQL Server
+    # lança "Divide by zero error" nesse caso, falhando a requisição com 500.
     # Réplica fiel do comportamento original; não adicionamos proteção sem
     # confirmação de que isso é desejado.
+    lucro_bruto_expr = func.sum(tmp.c.faturamento - tmp.c.custo_medio)
     return (
         db.query(
             tmp.c.filial,
@@ -148,9 +157,9 @@ def _query_faturamento(db: Session, data_inicial: str, data_final: Optional[str]
             tmp.c.descricao,
             func.sum(tmp.c.qtde).label("qtde"),
             func.sum(tmp.c.faturamento).label("faturamento"),
-            func.avg(tmp.c.preco_medio).label("preco_medio"),
-            func.sum(tmp.c.lucro_bruto).label("lucro_bruto"),
-            (func.sum(tmp.c.lucro_bruto) / func.sum(tmp.c.faturamento) * 100).label("margem"),
+            func.avg(tmp.c.faturamento / tmp.c.qtde).label("preco_medio"),
+            lucro_bruto_expr.label("lucro_bruto"),
+            (lucro_bruto_expr / func.sum(tmp.c.faturamento) * 100).label("margem"),
         )
         .group_by(tmp.c.filial, tmp.c.dia, tmp.c.codigo, tmp.c.descricao)
         .order_by(tmp.c.filial, tmp.c.dia, tmp.c.codigo)
