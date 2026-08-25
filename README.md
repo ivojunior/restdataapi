@@ -224,15 +224,18 @@ Para itens com `D2_YOPER = '542'/'543'/'544'` (devolução), a quantidade (`quan
 
 Suporta apenas paginação (`skip`, `limit`) e os dois filtros de data acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha (o resultado já é agregado).
 
+O client desktop deste endpoint é `client/app_faturamento.py` (veja "Clients desktop" abaixo).
+
 ## Clients desktop
 
-Além da API, o diretório `client/` traz aplicações desktop (Tkinter) que consomem os relatórios via `APIClient` (`client/api_client.py`), com filtros, KPIs, gráficos e exportação para Excel. Os três exibem o logotipo (`client/logo.jpg`) no canto superior esquerdo da janela; se o arquivo não existir, o cabeçalho é exibido sem logotipo, sem interromper a aplicação:
+Além da API, o diretório `client/` traz aplicações desktop (Tkinter) que consomem os relatórios via `APIClient` (`client/api_client.py`), com filtros, KPIs, gráficos e exportação para Excel. Os quatro exibem o logotipo (`client/logo.jpg`) no canto superior esquerdo da janela; se o arquivo não existir, o cabeçalho é exibido sem logotipo, sem interromper a aplicação:
 
 | Script                     | Endpoint            | Observação |
 |-----------------------------|---------------------|------------|
 | `client/app_financeiro.py`  | `/financeiro/`      | `vencimento_de`/`vencimento_ate`/`status` já vão para a API (período inicia na data atual, mesmo padrão da API); demais filtros são aplicados no cliente. |
 | `client/app_estoque.py`     | `/saldos-estoque/`  | `tipo_produto`/`local` resolvidos por um seletor de "Tipo de Estoque". |
 | `client/app_cargas.py`      | `/cargas/`          | `data_inicial`/`data_final`/`status` já vão para a API (os dois seletores de data — "Data de"/"Data até" — já iniciam na data de hoje, igual ao padrão da API; Status tem só "Aberta"/"Fechada" no seletor, resolvido no banco por causa do volume do relatório); demais filtros (filial, cliente, caminhão) são aplicados no cliente. `caminhao` e `status_carga` já chegam formatados da API (placa `KHA0902` como "Cliente"; "Aberta"/"Fechada" em vez do código bruto) — o client não reclassifica essas colunas. `motorista` (join opcional) pode vir nulo; exibido como "—" na tabela, junto com bairro/município do cliente. |
+| `client/app_faturamento.py` | `/faturamento/`     | Seletores de "Mês"/"Ano" (não "Data de"/"Data até") — a tela sempre consulta a API por um único mês por vez, calculando `data_inicial`/`data_final` como o primeiro e o último dia do mês escolhido, porque a API agrega por dia do mês (não por data completa) e misturaria dias iguais de meses diferentes se o período enviado cobrisse mais de um mês. Filtros de Filial e Produto (por código ou descrição) são aplicados no cliente. |
 
 Para rodar:
 

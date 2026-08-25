@@ -147,6 +147,61 @@ class APIClient:
 
         return all_items
 
+    def get_faturamento_page(
+        self,
+        skip: int = 0,
+        limit: int = 200,
+        data_inicial: Optional[str] = None,
+        data_final: Optional[str] = None,
+    ) -> Dict:
+        params: Dict[str, Any] = {"skip": skip, "limit": limit}
+        if data_inicial:
+            params["data_inicial"] = data_inicial
+        if data_final:
+            params["data_final"] = data_final
+        return self._get("/faturamento/", params)
+
+    def get_all_faturamento(
+        self,
+        data_inicial: Optional[str] = None,
+        data_final: Optional[str] = None,
+        progress_callback: Optional[Callable[[int], None]] = None,
+    ) -> List[Dict]:
+        """Busca todas as páginas do relatório de faturamento.
+
+        O endpoint /faturamento aplica sempre como regra fixa produtos do
+        tipo 'PA' e os tipos de operação 501/542/543/544 (venda/devolução);
+        o resultado já vem agregado por filial/dia do mês/produto. O
+        período (data_inicial/data_final) é parametrizável — sem
+        data_inicial, a API assume a data atual do sistema; sem
+        data_final, não há limite superior. Qualquer outro filtro (filial,
+        produto) é aplicado no cliente, após o carregamento completo dos
+        dados.
+
+        A API não devolve o total de registros (um count(*) exato sobre os
+        mesmos joins/agregações da consulta é caro demais para calcular a
+        cada página — ver README). O carregamento completo continua
+        funcionando normalmente: para assim que uma página vier vazia.
+        """
+        all_items: List[Dict] = []
+        skip = 0
+        limit = 200
+
+        while True:
+            result = self.get_faturamento_page(
+                skip=skip, limit=limit, data_inicial=data_inicial, data_final=data_final)
+            items = result["items"]
+            all_items.extend(items)
+            skip += len(items)
+
+            if progress_callback:
+                progress_callback(len(all_items))
+
+            if not items:
+                break
+
+        return all_items
+
     def get_saldos_estoque_page(
         self,
         skip: int = 0,
