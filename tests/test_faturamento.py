@@ -58,7 +58,9 @@ def test_agrega_vendas_do_mesmo_dia_produto_e_filial(client, auth_headers, db_se
     assert item["faturamento"] == "1500.00"
     assert item["custo"] == "900.00"
     assert item["lucro_bruto"] == "600.00"
-    assert item["margem_bruta"] == "40.00"
+    assert item["margem"] == "40.00"
+    # markup = lucro_bruto/custo*100 = 600/900*100 = 66.666...
+    assert item["markup"] == "66.67"
 
 
 def test_bonificacao_zera_faturamento_e_conta_como_prejuizo_no_lucro(client, auth_headers, db_session):
@@ -85,7 +87,9 @@ def test_bonificacao_zera_faturamento_e_conta_como_prejuizo_no_lucro(client, aut
     assert item["custo"] == "720.00"
     # lucro_bruto = SUM(faturamento) - SUM(custo) = 1000 - (600+120) = 280
     assert item["lucro_bruto"] == "280.00"
-    assert item["margem_bruta"] == "28.00"
+    assert item["margem"] == "28.00"
+    # markup = lucro_bruto/custo*100 = 280/720*100 = 38.888...
+    assert item["markup"] == "38.89"
     # preco_medio = SUM(faturamento)/SUM(qtde) = 1000/12 — média ponderada
     # pela quantidade (não mais a média simples de uma razão por linha,
     # que daria AVG(1000/10, 0/2) = 50; a versão corrigida reflete que o

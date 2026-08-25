@@ -20,4 +20,5 @@ class FaturamentoRead(BaseModel):
     faturamento: Decimal
     custo: Decimal
     lucro_bruto: Decimal
-    margem_bruta: Decimal
+    margem: Decimal
+    markup: Decimal

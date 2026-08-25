@@ -102,16 +102,18 @@ def _query_faturamento(db: Session, data_inicial: str, data_final: Optional[str]
 
     tmp = inner.subquery()
 
-    # ATENÇÃO: preco_medio e margem_bruta dividem por SUM(qtde)/SUM(faturamento)
-    # sem proteção contra zero — igual à consulta original. Um grupo
-    # (filial/dia/produto) com só bonificação e nenhuma venda no período
-    # sempre tem faturamento total zero; um grupo cuja soma de QTDE dê zero
-    # também é possível em tese (item com D2_QUANT zerado). Em qualquer um
-    # desses casos o SQL Server lança "Divide by zero error" e a requisição
-    # falha com 500. Réplica fiel do comportamento original; não adicionamos
-    # proteção sem confirmação de que isso é desejado.
+    # ATENÇÃO: preco_medio, margem e markup dividem por SUM(qtde)/
+    # SUM(faturamento)/SUM(custo) sem proteção contra zero — igual à consulta
+    # original. Um grupo (filial/dia/produto) com só bonificação e nenhuma
+    # venda no período sempre tem faturamento total zero; um grupo cuja soma
+    # de QTDE ou de CUSTO dê zero também é possível em tese (item com
+    # D2_QUANT ou D2_CUSTO1 zerado). Em qualquer um desses casos o SQL Server
+    # lança "Divide by zero error" e a requisição falha com 500. Réplica fiel
+    # do comportamento original; não adicionamos proteção sem confirmação de
+    # que isso é desejado.
     faturamento_expr = func.sum(tmp.c.faturamento)
-    lucro_bruto_expr = faturamento_expr - func.sum(tmp.c.custo)
+    custo_expr = func.sum(tmp.c.custo)
+    lucro_bruto_expr = faturamento_expr - custo_expr
     return (
         db.query(
             tmp.c.filial,
@@ -121,9 +123,14 @@ def _query_faturamento(db: Session, data_inicial: str, data_final: Optional[str]
             func.sum(tmp.c.qtde).label("qtde"),
             (faturamento_expr / func.sum(tmp.c.qtde)).label("preco_medio"),
             faturamento_expr.label("faturamento"),
-            func.sum(tmp.c.custo).label("custo"),
+            custo_expr.label("custo"),
             lucro_bruto_expr.label("lucro_bruto"),
-            (lucro_bruto_expr / faturamento_expr * 100).label("margem_bruta"),
+            # MARGEM: lucro bruto sobre o faturamento. MARKUP: lucro bruto
+            # sobre o custo — mesmo numerador (lucro_bruto_expr), denominador
+            # diferente; são métricas relacionadas mas não intercambiáveis
+            # (margem nunca chega a 100%, markup não tem teto).
+            (lucro_bruto_expr / faturamento_expr * 100).label("margem"),
+            (lucro_bruto_expr / custo_expr * 100).label("markup"),
         )
         .group_by(tmp.c.filial, tmp.c.dia, tmp.c.codigo, tmp.c.descricao)
         .order_by(tmp.c.filial, tmp.c.dia, tmp.c.codigo, tmp.c.descricao)
@@ -165,11 +172,12 @@ def listar_faturamento(
             faturamento=faturamento,
             custo=custo,
             lucro_bruto=lucro_bruto,
-            margem_bruta=margem_bruta,
+            margem=margem,
+            markup=markup,
         )
         for (
             filial, dia, codigo, descricao, qtde, preco_medio,
-            faturamento, custo, lucro_bruto, margem_bruta,
+            faturamento, custo, lucro_bruto, margem, markup,
         ) in linhas
     ]
 

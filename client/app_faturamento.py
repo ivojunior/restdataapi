@@ -67,7 +67,8 @@ TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
     ("custo",         "Custo (R$)",       120,  "e"),
     ("preco_medio",   "Preço Médio (R$)", 120,  "e"),
     ("lucro_bruto",   "Lucro Bruto (R$)", 130,  "e"),
-    ("margem_bruta",  "Margem Bruta (%)", 100,  "e"),
+    ("margem",        "Margem (%)",        90,  "e"),
+    ("markup",        "Markup (%)",         90,  "e"),
 ]
 
 
@@ -305,6 +306,7 @@ class FaturamentoApp:
             ("preco_medio_acum",  "Preço Médio Acumulado",   "#6c3483"),
             ("lucro_bruto",       "Lucro Bruto Total",       "#1e8449"),
             ("margem_geral",      "Margem Geral",            "#ca6f1e"),
+            ("markup_geral",      "Markup Geral",            "#b9770e"),
         ]
 
         for i, (key, label, fg) in enumerate(cards_cfg):
@@ -459,7 +461,7 @@ class FaturamentoApp:
 
         df = pd.DataFrame(items) if items else pd.DataFrame()
         if not df.empty:
-            for col in ("quantidade", "faturamento", "custo", "preco_medio", "lucro_bruto", "margem_bruta"):
+            for col in ("quantidade", "faturamento", "custo", "preco_medio", "lucro_bruto", "margem", "markup"):
                 df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
             df["dia"] = pd.to_numeric(df["dia"], errors="coerce").fillna(0).astype(int)
 
@@ -533,13 +535,14 @@ class FaturamentoApp:
         custo_total = float(df["custo"].sum())
         quantidade_total = float(df["quantidade"].sum())
         lucro_total = float(df["lucro_bruto"].sum())
-        # Margem geral e preço médio acumulado recalculados sobre os totais
-        # do recorte carregado (não são a média das colunas "margem_bruta"/
-        # "preco_medio" — isso daria peso igual a grupos pequenos e grandes;
-        # mesma lógica de média ponderada que a própria API já usa para
-        # calcular preco_medio por grupo, aplicada aqui sobre o recorte
-        # inteiro).
+        # Margem geral, markup geral e preço médio acumulado recalculados
+        # sobre os totais do recorte carregado (não são a média das colunas
+        # "margem"/"markup"/"preco_medio" — isso daria peso igual a grupos
+        # pequenos e grandes; mesma lógica de média ponderada que a própria
+        # API já usa para calcular preco_medio por grupo, aplicada aqui
+        # sobre o recorte inteiro).
         margem_geral = (lucro_total / faturamento_total * 100) if faturamento_total else 0.0
+        markup_geral = (lucro_total / custo_total * 100) if custo_total else 0.0
         preco_medio_acum = (faturamento_total / quantidade_total) if quantidade_total else 0.0
 
         self._kpi_vars["registros"].set(f'{len(df):,}'.replace(",", "."))
@@ -550,6 +553,7 @@ class FaturamentoApp:
         self._kpi_vars["preco_medio_acum"].set(_brl(preco_medio_acum))
         self._kpi_vars["lucro_bruto"].set(_brl(lucro_total))
         self._kpi_vars["margem_geral"].set(_pct(margem_geral))
+        self._kpi_vars["markup_geral"].set(_pct(markup_geral))
 
     # ── gráficos ──────────────────────────────────────────────────────────────
 
@@ -690,7 +694,8 @@ class FaturamentoApp:
                 _brl(row.custo),
                 _brl(row.preco_medio),
                 _brl(row.lucro_bruto),
-                _pct(row.margem_bruta),
+                _pct(row.margem),
+                _pct(row.markup),
             ))
 
     def _sort_tree(self, col: str) -> None:
@@ -699,7 +704,7 @@ class FaturamentoApp:
         asc = not self._sort_ascending.get(col, False)
         self._sort_ascending[col] = asc
 
-        if col in ("dia", "quantidade", "faturamento", "custo", "preco_medio", "lucro_bruto", "margem_bruta"):
+        if col in ("dia", "quantidade", "faturamento", "custo", "preco_medio", "lucro_bruto", "margem", "markup"):
             self._df = self._df.sort_values(col, ascending=asc, na_position="last")
         else:
             self._df = self._df.sort_values(
@@ -815,7 +820,8 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Custo (R$)",        "custo",        16),
         ("Preço Médio (R$)",  "preco_medio",  16),
         ("Lucro Bruto (R$)",  "lucro_bruto",  16),
-        ("Margem Bruta (%)",  "margem_bruta", 14),
+        ("Margem (%)",        "margem",       12),
+        ("Markup (%)",        "markup",       12),
     ]
     for ci, (heading, _, w) in enumerate(cols_aba1, 1):
         _hdr(ws1, 1, ci, heading)
@@ -837,7 +843,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
             elif field == "quantidade":
                 cell.number_format = QTD_FMT
                 cell.alignment = RIGHT
-            elif field == "margem_bruta":
+            elif field in ("margem", "markup"):
                 cell.number_format = '#,##0.00"%"'
                 cell.alignment = RIGHT
             else:
@@ -859,6 +865,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     custo_total = float(df["custo"].sum())
     lucro_total = float(df["lucro_bruto"].sum())
     margem_geral = (lucro_total / faturamento_total) if faturamento_total else 0.0
+    markup_geral = (lucro_total / custo_total) if custo_total else 0.0
 
     items_resumo = [
         ("Total de Registros",       len(df),                          None),
@@ -869,6 +876,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Custo Total (R$)",         custo_total,                      BRL),
         ("Lucro Bruto Total (R$)",   lucro_total,                      BRL),
         ("Margem Geral (%)",         margem_geral,                     PCT),
+        ("Markup Geral (%)",         markup_geral,                     PCT),
     ]
     for i, (lbl, val, fmt) in enumerate(items_resumo, 4):
         c1 = ws2.cell(i, 1, lbl)
