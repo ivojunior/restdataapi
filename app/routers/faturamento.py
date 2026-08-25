@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import Integer, and_, case, func
+from sqlalchemy import Integer, and_, case, func, literal_column
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, Query
@@ -40,7 +40,26 @@ def _query_faturamento(db: Session, data_inicial: str, data_final: Optional[str]
     # completa: se o período (data_inicial/data_final) atravessar mais de um
     # mês, dias iguais de meses diferentes somam juntos no mesmo grupo,
     # exatamente como a consulta original faz.
-    dia_coluna = func.cast(func.substring(ItemFaturamento.emissao, 7, 2), Integer)
+    # literal_column("7")/("2") em vez de inteiros Python simples: o
+    # SQLAlchemy compilaria 7 e 2 como parâmetros ligados (?), e cada
+    # ocorrência desta expressão no SQL final (uma na lista de colunas, outra
+    # no GROUP BY) ganharia parâmetros ? diferentes — mesmo sendo o mesmo
+    # objeto Python reutilizado. O SQL Server então não consegue provar
+    # estaticamente que os dois SUBSTRING(col, ?, ?) são a mesma expressão e
+    # rejeita a query ("D2_EMISSAO is invalid in the select list because it
+    # is not contained in either an aggregate function or the GROUP BY
+    # clause"). Com literal_column, 7 e 2 viram texto SQL fixo em vez de
+    # parâmetro, então as duas ocorrências ficam byte-a-byte idênticas e o
+    # SQL Server reconhece a mesma expressão nas duas cláusulas. Não
+    # reproduzido no SQLite dos testes, que é mais permissivo nessa
+    # validação — não confiar só nos testes pra esse tipo de expressão
+    # calculada usada como chave de agrupamento; testar contra o SQL Server
+    # real (ou pelo menos inspecionar o SQL compilado) antes de assumir que
+    # está correto.
+    dia_coluna = func.cast(
+        func.substring(ItemFaturamento.emissao, literal_column("7"), literal_column("2")),
+        Integer,
+    )
 
     qtde_coluna = case(
         (ItemFaturamento.operacao.in_(_OPERACOES_DEVOLUCAO), 0),
