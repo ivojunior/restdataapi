@@ -16,7 +16,8 @@ class FaturamentoRead(BaseModel):
     codigo: str
     descricao: str
     quantidade: Decimal
-    faturamento: Decimal
     preco_medio: Decimal
+    faturamento: Decimal
+    custo: Decimal
     lucro_bruto: Decimal
-    margem: Decimal
+    margem_bruta: Decimal

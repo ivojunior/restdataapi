@@ -56,17 +56,19 @@ def test_agrega_vendas_do_mesmo_dia_produto_e_filial(client, auth_headers, db_se
     assert item["descricao"] == "Produto Exemplo"
     assert item["quantidade"] == "15.0000"
     assert item["faturamento"] == "1500.00"
+    assert item["custo"] == "900.00"
     assert item["lucro_bruto"] == "600.00"
-    assert item["margem"] == "40.00"
+    assert item["margem_bruta"] == "40.00"
 
 
 def test_bonificacao_zera_faturamento_e_conta_como_prejuizo_no_lucro(client, auth_headers, db_session):
     # select_faturamento.sql zera FATURAMENTO para bonificação (542/543/544)
     # — dar um produto de bonificação não gera receita — mas QTDE conta
-    # normalmente (sem CASE). LUCRO_BRUTO e PRECO_MEDIO são calculados a
-    # partir do FATURAMENTO já zerado (não mais do D2_TOTAL bruto — correção
-    # do usuário na consulta), então a bonificação contribui só com o custo
-    # (prejuízo), sem nenhuma "receita" contrapondo.
+    # normalmente (sem CASE). PRECO_MEDIO e LUCRO_BRUTO são calculados pela
+    # consulta externa a partir do FATURAMENTO/CUSTO já somados (não mais
+    # linha a linha, e não mais do D2_TOTAL bruto), então a bonificação
+    # contribui só com o custo (prejuízo), sem nenhuma "receita" contrapondo,
+    # e "puxa para baixo" o preço médio ponderado do grupo.
     db_session.add_all([
         _produto(),
         _item(operacao="501", quantidade=Decimal("10.0000"),
@@ -80,11 +82,16 @@ def test_bonificacao_zera_faturamento_e_conta_como_prejuizo_no_lucro(client, aut
     item = resposta.json()["items"][0]
     assert item["quantidade"] == "12.0000"
     assert item["faturamento"] == "1000.00"
+    assert item["custo"] == "720.00"
     # lucro_bruto = SUM(faturamento) - SUM(custo) = 1000 - (600+120) = 280
     assert item["lucro_bruto"] == "280.00"
-    assert item["margem"] == "28.00"
-    # preco_medio = AVG(faturamento/qtde por linha) = AVG(1000/10, 0/2) = AVG(100, 0) = 50
-    assert item["preco_medio"] == "50.0"
+    assert item["margem_bruta"] == "28.00"
+    # preco_medio = SUM(faturamento)/SUM(qtde) = 1000/12 — média ponderada
+    # pela quantidade (não mais a média simples de uma razão por linha,
+    # que daria AVG(1000/10, 0/2) = 50; a versão corrigida reflete que o
+    # preço médio real de venda cai quando parte da quantidade movimentada
+    # foi dada de bonificação, sem gerar receita).
+    assert item["preco_medio"] == "83.3333"
 
 
 def test_quantidade_dividida_pela_conversao_do_produto(client, auth_headers, db_session):

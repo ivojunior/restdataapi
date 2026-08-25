@@ -58,15 +58,16 @@ MESES_NOMES = [
 ]
 
 TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
-    ("filial",       "Filial",           60,  "c"),
-    ("dia",          "Dia",              50,  "c"),
-    ("codigo",       "Código",          110,  "c"),
-    ("descricao",    "Descrição",       300,  "w"),
-    ("quantidade",   "Quantidade",      110,  "e"),
-    ("faturamento",  "Faturamento (R$)", 130,  "e"),
-    ("preco_medio",  "Preço Médio (R$)", 120,  "e"),
-    ("lucro_bruto",  "Lucro Bruto (R$)", 130,  "e"),
-    ("margem",       "Margem (%)",       90,  "e"),
+    ("filial",        "Filial",            60,  "c"),
+    ("dia",           "Dia",               50,  "c"),
+    ("codigo",        "Código",           110,  "c"),
+    ("descricao",     "Descrição",        300,  "w"),
+    ("quantidade",    "Quantidade",       110,  "e"),
+    ("faturamento",   "Faturamento (R$)", 130,  "e"),
+    ("custo",         "Custo (R$)",       120,  "e"),
+    ("preco_medio",   "Preço Médio (R$)", 120,  "e"),
+    ("lucro_bruto",   "Lucro Bruto (R$)", 130,  "e"),
+    ("margem_bruta",  "Margem Bruta (%)", 100,  "e"),
 ]
 
 
@@ -300,6 +301,7 @@ class FaturamentoApp:
             ("produtos",       "Produtos",             "#7f8c8d"),
             ("qtd_total",      "Quantidade Total",     "#1a5276"),
             ("faturamento",    "Faturamento Total",    "#154360"),
+            ("custo",          "Custo Total",          "#943126"),
             ("lucro_bruto",    "Lucro Bruto Total",    "#1e8449"),
             ("margem_geral",   "Margem Geral",         "#ca6f1e"),
         ]
@@ -456,7 +458,7 @@ class FaturamentoApp:
 
         df = pd.DataFrame(items) if items else pd.DataFrame()
         if not df.empty:
-            for col in ("quantidade", "faturamento", "preco_medio", "lucro_bruto", "margem"):
+            for col in ("quantidade", "faturamento", "custo", "preco_medio", "lucro_bruto", "margem_bruta"):
                 df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
             df["dia"] = pd.to_numeric(df["dia"], errors="coerce").fillna(0).astype(int)
 
@@ -527,16 +529,20 @@ class FaturamentoApp:
             return
 
         faturamento_total = float(df["faturamento"].sum())
+        custo_total = float(df["custo"].sum())
         lucro_total = float(df["lucro_bruto"].sum())
         # Margem geral recalculada sobre os totais do recorte carregado (não
-        # é a média da coluna "margem" — isso daria peso igual a grupos
-        # pequenos e grandes; mesma lógica que a própria API usa por grupo).
+        # é a média da coluna "margem_bruta" — isso daria peso igual a
+        # grupos pequenos e grandes; mesma lógica que a própria API usa por
+        # grupo, e a mesma razão pela qual "preco_medio" na API é uma média
+        # ponderada, não uma média simples).
         margem_geral = (lucro_total / faturamento_total * 100) if faturamento_total else 0.0
 
         self._kpi_vars["registros"].set(f'{len(df):,}'.replace(",", "."))
         self._kpi_vars["produtos"].set(f'{df["codigo"].nunique():,}'.replace(",", "."))
         self._kpi_vars["qtd_total"].set(_qtd(df["quantidade"].sum()))
         self._kpi_vars["faturamento"].set(_brl(faturamento_total))
+        self._kpi_vars["custo"].set(_brl(custo_total))
         self._kpi_vars["lucro_bruto"].set(_brl(lucro_total))
         self._kpi_vars["margem_geral"].set(_pct(margem_geral))
 
@@ -676,9 +682,10 @@ class FaturamentoApp:
                 row.descricao,
                 _qtd(row.quantidade),
                 _brl(row.faturamento),
+                _brl(row.custo),
                 _brl(row.preco_medio),
                 _brl(row.lucro_bruto),
-                _pct(row.margem),
+                _pct(row.margem_bruta),
             ))
 
     def _sort_tree(self, col: str) -> None:
@@ -687,7 +694,7 @@ class FaturamentoApp:
         asc = not self._sort_ascending.get(col, False)
         self._sort_ascending[col] = asc
 
-        if col in ("dia", "quantidade", "faturamento", "preco_medio", "lucro_bruto", "margem"):
+        if col in ("dia", "quantidade", "faturamento", "custo", "preco_medio", "lucro_bruto", "margem_bruta"):
             self._df = self._df.sort_values(col, ascending=asc, na_position="last")
         else:
             self._df = self._df.sort_values(
@@ -800,9 +807,10 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Descrição",         "descricao",    36),
         ("Quantidade",        "quantidade",   14),
         ("Faturamento (R$)",  "faturamento",  16),
+        ("Custo (R$)",        "custo",        16),
         ("Preço Médio (R$)",  "preco_medio",  16),
         ("Lucro Bruto (R$)",  "lucro_bruto",  16),
-        ("Margem (%)",        "margem",       12),
+        ("Margem Bruta (%)",  "margem_bruta", 14),
     ]
     for ci, (heading, _, w) in enumerate(cols_aba1, 1):
         _hdr(ws1, 1, ci, heading)
@@ -818,13 +826,13 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
             val = getattr(row, field, None)
             cell = ws1.cell(row=ri, column=ci, value=val)
             cell.border = BORDER
-            if field in ("faturamento", "preco_medio", "lucro_bruto"):
+            if field in ("faturamento", "custo", "preco_medio", "lucro_bruto"):
                 cell.number_format = BRL
                 cell.alignment = RIGHT
             elif field == "quantidade":
                 cell.number_format = QTD_FMT
                 cell.alignment = RIGHT
-            elif field == "margem":
+            elif field == "margem_bruta":
                 cell.number_format = '#,##0.00"%"'
                 cell.alignment = RIGHT
             else:
@@ -843,6 +851,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         italic=True, size=9, color="7F8C8D", name="Calibri")
 
     faturamento_total = float(df["faturamento"].sum())
+    custo_total = float(df["custo"].sum())
     lucro_total = float(df["lucro_bruto"].sum())
     margem_geral = (lucro_total / faturamento_total) if faturamento_total else 0.0
 
@@ -852,6 +861,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Filiais Distintas",        int(df["filial"].nunique()),      None),
         ("Quantidade Total",         float(df["quantidade"].sum()),    QTD_FMT),
         ("Faturamento Total (R$)",   faturamento_total,                BRL),
+        ("Custo Total (R$)",         custo_total,                      BRL),
         ("Lucro Bruto Total (R$)",   lucro_total,                      BRL),
         ("Margem Geral (%)",         margem_geral,                     PCT),
     ]
