@@ -297,13 +297,14 @@ class FaturamentoApp:
 
         self._kpi_vars: Dict[str, tk.StringVar] = {}
         cards_cfg = [
-            ("registros",      "Registros",           "#2c3e50"),
-            ("produtos",       "Produtos",             "#7f8c8d"),
-            ("qtd_total",      "Quantidade Total",     "#1a5276"),
-            ("faturamento",    "Faturamento Total",    "#154360"),
-            ("custo",          "Custo Total",          "#943126"),
-            ("lucro_bruto",    "Lucro Bruto Total",    "#1e8449"),
-            ("margem_geral",   "Margem Geral",         "#ca6f1e"),
+            ("registros",         "Registros",               "#2c3e50"),
+            ("produtos",          "Produtos",                "#7f8c8d"),
+            ("qtd_total",         "Quantidade Total",        "#1a5276"),
+            ("faturamento",       "Faturamento Total",       "#154360"),
+            ("custo",             "Custo Total",             "#943126"),
+            ("preco_medio_acum",  "Preço Médio Acumulado",   "#6c3483"),
+            ("lucro_bruto",       "Lucro Bruto Total",       "#1e8449"),
+            ("margem_geral",      "Margem Geral",            "#ca6f1e"),
         ]
 
         for i, (key, label, fg) in enumerate(cards_cfg):
@@ -530,19 +531,23 @@ class FaturamentoApp:
 
         faturamento_total = float(df["faturamento"].sum())
         custo_total = float(df["custo"].sum())
+        quantidade_total = float(df["quantidade"].sum())
         lucro_total = float(df["lucro_bruto"].sum())
-        # Margem geral recalculada sobre os totais do recorte carregado (não
-        # é a média da coluna "margem_bruta" — isso daria peso igual a
-        # grupos pequenos e grandes; mesma lógica que a própria API usa por
-        # grupo, e a mesma razão pela qual "preco_medio" na API é uma média
-        # ponderada, não uma média simples).
+        # Margem geral e preço médio acumulado recalculados sobre os totais
+        # do recorte carregado (não são a média das colunas "margem_bruta"/
+        # "preco_medio" — isso daria peso igual a grupos pequenos e grandes;
+        # mesma lógica de média ponderada que a própria API já usa para
+        # calcular preco_medio por grupo, aplicada aqui sobre o recorte
+        # inteiro).
         margem_geral = (lucro_total / faturamento_total * 100) if faturamento_total else 0.0
+        preco_medio_acum = (faturamento_total / quantidade_total) if quantidade_total else 0.0
 
         self._kpi_vars["registros"].set(f'{len(df):,}'.replace(",", "."))
         self._kpi_vars["produtos"].set(f'{df["codigo"].nunique():,}'.replace(",", "."))
         self._kpi_vars["qtd_total"].set(_qtd(df["quantidade"].sum()))
         self._kpi_vars["faturamento"].set(_brl(faturamento_total))
         self._kpi_vars["custo"].set(_brl(custo_total))
+        self._kpi_vars["preco_medio_acum"].set(_brl(preco_medio_acum))
         self._kpi_vars["lucro_bruto"].set(_brl(lucro_total))
         self._kpi_vars["margem_geral"].set(_pct(margem_geral))
 
