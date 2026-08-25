@@ -21,21 +21,26 @@ router = APIRouter(
 
 # Regras de negócio fixas do relatório (réplica de select_faturamento.sql):
 # só produtos acabados (B1_TIPO = 'PA') e só estes tipos de operação — '501'
-# é venda; '542'/'543'/'544' são devoluções (customização desta instalação
-# do Protheus, sem lista pública de valores, confirmada pelo usuário).
+# é venda; '542'/'543'/'544' são bonificações (customização desta instalação
+# do Protheus, sem lista pública de valores, confirmada pelo usuário — o
+# comentário "-- bonificacoes" na consulta original chegou a ser corrigido
+# pelo usuário; antes achávamos, por engano, que eram devoluções).
 _TIPO_PRODUTO = "PA"
 _OPERACOES = ("501", "542", "543", "544")
-_OPERACOES_DEVOLUCAO = ("542", "543", "544")
+_OPERACOES_BONIFICACAO = ("542", "543", "544")
 _OPERACAO_VENDA = "501"
 
 
 def _query_faturamento(db: Session, data_inicial: str, data_final: Optional[str] = None):
     # select_faturamento.sql agrega em duas camadas, e replicamos a mesma
     # estrutura (em vez de agregar tudo de uma vez): a subconsulta interna
-    # calcula, por linha de SD2070, a quantidade vendida (QTDE — zero para
-    # devoluções; a query original não subtrai a quantidade devolvida, só
-    # zera), o faturamento bruto (D2_TOTAL) e o lucro bruto
-    # (D2_TOTAL - D2_CUSTO1); a consulta externa soma tudo por
+    # calcula, por linha de SD2070, a quantidade (QTDE — sempre
+    # D2_QUANT/B1_CONV, inclusive para bonificação; a consulta original não
+    # zera a quantidade), o faturamento (FATURAMENTO — zero para
+    # bonificação, D2_TOTAL só para venda: dar um produto de bonificação não
+    # gera receita, mas continua contando na quantidade movimentada) e o
+    # lucro bruto (D2_TOTAL - D2_CUSTO1, sempre, sem CASE — usa o D2_TOTAL
+    # bruto mesmo para bonificação); a consulta externa soma tudo por
     # filial/dia/produto. DIA é DAY(D2_EMISSAO) — dia do mês, não uma data
     # completa: se o período (data_inicial/data_final) atravessar mais de um
     # mês, dias iguais de meses diferentes somam juntos no mesmo grupo,
@@ -61,10 +66,14 @@ def _query_faturamento(db: Session, data_inicial: str, data_final: Optional[str]
         Integer,
     )
 
-    qtde_coluna = case(
-        (ItemFaturamento.operacao.in_(_OPERACOES_DEVOLUCAO), 0),
-        (ItemFaturamento.operacao == _OPERACAO_VENDA,
-         ItemFaturamento.quantidade / Produto.conversao),
+    # Sem CASE — diferente de uma versão anterior desta query, que zerava a
+    # quantidade para bonificação. Agora a quantidade conta sempre; é o
+    # faturamento (abaixo) que zera para bonificação.
+    qtde_coluna = ItemFaturamento.quantidade / Produto.conversao
+
+    faturamento_coluna = case(
+        (ItemFaturamento.operacao.in_(_OPERACOES_BONIFICACAO), 0),
+        (ItemFaturamento.operacao == _OPERACAO_VENDA, ItemFaturamento.total),
         else_=0,
     )
 
@@ -75,7 +84,7 @@ def _query_faturamento(db: Session, data_inicial: str, data_final: Optional[str]
             ItemFaturamento.codigo_produto.label("codigo"),
             Produto.descricao.label("descricao"),
             qtde_coluna.label("qtde"),
-            ItemFaturamento.total.label("faturamento"),
+            faturamento_coluna.label("faturamento"),
             # PRECO_MEDIO já é um AVG() dentro da subconsulta original — o
             # GROUP BY interno agrupa por praticamente todas as colunas
             # diferenciadoras, então normalmente é a razão de uma única
@@ -123,9 +132,12 @@ def _query_faturamento(db: Session, data_inicial: str, data_final: Optional[str]
     tmp = inner.subquery()
 
     # ATENÇÃO: margem divide por SUM(faturamento) sem proteção contra zero —
-    # igual à consulta original. Se um grupo (filial/dia/produto) tiver
-    # faturamento total zero (ex.: só devolução, sem venda no período), o
-    # SQL Server lança "Divide by zero error" e a requisição falha com 500.
+    # igual à consulta original. Agora que faturamento é zerado para
+    # bonificação (veja faturamento_coluna acima), um grupo (filial/dia/
+    # produto) com só bonificação e nenhuma venda no período sempre tem
+    # faturamento total zero — mais fácil de acontecer na prática do que
+    # antes. Nesse caso o SQL Server lança "Divide by zero error" e a
+    # requisição falha com 500.
     # Réplica fiel do comportamento original; não adicionamos proteção sem
     # confirmação de que isso é desejado.
     return (

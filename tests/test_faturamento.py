@@ -60,25 +60,27 @@ def test_agrega_vendas_do_mesmo_dia_produto_e_filial(client, auth_headers, db_se
     assert item["margem"] == "40.00"
 
 
-def test_devolucao_zera_quantidade_mas_conta_no_faturamento_e_lucro(client, auth_headers, db_session):
-    # select_faturamento.sql não subtrai a quantidade devolvida — só zera a
-    # contribuição da linha de devolução pra QTDE. FATURAMENTO e LUCRO_BRUTO
-    # continuam somando o valor da devolução (negativo em D2_TOTAL/D2_CUSTO1,
-    # convenção do Protheus).
+def test_bonificacao_zera_faturamento_mas_conta_na_quantidade_e_no_lucro(client, auth_headers, db_session):
+    # select_faturamento.sql zera FATURAMENTO para bonificação (542/543/544)
+    # — dar um produto de bonificação não gera receita — mas QTDE conta
+    # normalmente (sem CASE, diferente de uma versão anterior desta query,
+    # que zerava a quantidade em vez do faturamento). LUCRO_BRUTO usa
+    # D2_TOTAL bruto sem CASE nenhum, então continua refletindo o custo da
+    # bonificação mesmo com faturamento zerado.
     db_session.add_all([
         _produto(),
         _item(operacao="501", quantidade=Decimal("10.0000"),
               total=Decimal("1000.00"), custo=Decimal("600.00")),
         _item(operacao="542", quantidade=Decimal("2.0000"),
-              total=Decimal("-200.00"), custo=Decimal("-120.00")),
+              total=Decimal("200.00"), custo=Decimal("120.00")),
     ])
     db_session.commit()
 
     resposta = client.get("/faturamento/?data_inicial=20260101", headers=auth_headers)
     item = resposta.json()["items"][0]
-    assert item["quantidade"] == "10.0000"
-    assert item["faturamento"] == "800.00"
-    assert item["lucro_bruto"] == "320.00"
+    assert item["quantidade"] == "12.0000"
+    assert item["faturamento"] == "1000.00"
+    assert item["lucro_bruto"] == "480.00"
 
 
 def test_quantidade_dividida_pela_conversao_do_produto(client, auth_headers, db_session):

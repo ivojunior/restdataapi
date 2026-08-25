@@ -26,7 +26,7 @@ class ItemFaturamento(Base):
     codigo_produto = Column("D2_COD", String(15))
     # Customização desta instalação do Protheus (mesmo padrão de nomenclatura
     # de E2_YOPER em TituloPagar) — código do tipo de operação da nota fiscal.
-    # '501' = venda; '542'/'543'/'544' = devoluções (confirmados pelo usuário
+    # '501' = venda; '542'/'543'/'544' = bonificação (confirmados pelo usuário
     # via select_faturamento.sql — veja app/routers/faturamento.py).
     operacao = Column("D2_YOPER", String(6))
     quantidade = Column("D2_QUANT", Numeric(18, 4))

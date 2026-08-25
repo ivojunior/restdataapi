@@ -7,7 +7,7 @@ exporta tudo para Excel.
 
 O endpoint /faturamento agrega notas fiscais de saída de produtos acabados
 (tipo 'PA') por filial, dia do mês e produto — aplica sempre como regra
-fixa apenas os tipos de operação 501 (venda) e 542/543/544 (devolução).
+fixa apenas os tipos de operação 501 (venda) e 542/543/544 (bonificação).
 `dia` é o dia do mês da emissão (1 a 31), não uma data completa: por isso
 esta tela sempre consulta a API por um único mês por vez (Mês/Ano abaixo
 define data_inicial/data_final como o primeiro e o último dia do mês

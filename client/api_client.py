@@ -170,7 +170,7 @@ class APIClient:
         """Busca todas as páginas do relatório de faturamento.
 
         O endpoint /faturamento aplica sempre como regra fixa produtos do
-        tipo 'PA' e os tipos de operação 501/542/543/544 (venda/devolução);
+        tipo 'PA' e os tipos de operação 501/542/543/544 (venda/bonificação);
         o resultado já vem agregado por filial/dia do mês/produto. O
         período (data_inicial/data_final) é parametrizável — sem
         data_inicial, a API assume a data atual do sistema; sem
