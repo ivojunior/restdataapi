@@ -1,5 +1,9 @@
+import io
 from datetime import date, timedelta
 from decimal import Decimal
+
+import openpyxl
+import pytest
 
 from app.models.item_faturamento import ItemFaturamento
 from app.models.produto import Produto
@@ -96,6 +100,36 @@ def test_bonificacao_zera_faturamento_e_conta_como_prejuizo_no_lucro(client, aut
     # preço médio real de venda cai quando parte da quantidade movimentada
     # foi dada de bonificação, sem gerar receita).
     assert item["preco_medio"] == "83.3333"
+
+
+def test_grupo_so_com_bonificacao_nao_quebra_com_faturamento_zero(client, auth_headers, db_session):
+    # Achado num teste manual da SPA (piloto de Faturamento, Fase 3): um
+    # grupo (filial/dia/produto) só com bonificação, sem nenhuma venda, tem
+    # faturamento total zero — margem/markup dividem por zero, e preco_medio
+    # também divide por zero se a quantidade der zero. A consulta original
+    # (SQL Server) lançava "Divide by zero error" (500); aqui, com
+    # func.nullif no denominador, o resultado é None (não é possível
+    # calcular a razão), não um erro.
+    db_session.add_all([
+        _produto(),
+        _item(operacao="542", quantidade=Decimal("5.0000"),
+              total=Decimal("300.00"), custo=Decimal("150.00")),
+    ])
+    db_session.commit()
+
+    resposta = client.get("/faturamento/?data_inicial=20260101", headers=auth_headers)
+    assert resposta.status_code == 200
+    item = resposta.json()["items"][0]
+    assert item["quantidade"] == "5.0000"
+    assert item["faturamento"] == "0.00"
+    assert item["custo"] == "150.00"
+    assert item["lucro_bruto"] == "-150.00"
+    assert item["margem"] is None
+    # markup não depende de faturamento (denominador é custo, não zero aqui)
+    assert item["markup"] == "-100.00"
+    # preco_medio = faturamento/qtde = 0/5 = 0 — QTDE não é zero, então essa
+    # razão é calculável normalmente (diferente de margem, que é None).
+    assert item["preco_medio"] == "0.0000"
 
 
 def test_quantidade_dividida_pela_conversao_do_produto(client, auth_headers, db_session):
@@ -202,3 +236,85 @@ def test_metodos_de_escrita_nao_existem(client, auth_headers):
     assert client.post("/faturamento/", json={}, headers=auth_headers).status_code == 405
     assert client.put("/faturamento/", json={}, headers=auth_headers).status_code == 405
     assert client.delete("/faturamento/", headers=auth_headers).status_code == 405
+
+
+def test_export_gera_planilha_com_4_abas_e_valores_corretos(client, auth_headers, db_session):
+    # Réplica do cenário de test_bonificacao_zera_faturamento_e_conta_como_
+    # prejuizo_no_lucro, mas verificando a saída da planilha em vez do JSON.
+    db_session.add_all([
+        _produto(),
+        _item(operacao="501", quantidade=Decimal("10.0000"),
+              total=Decimal("1000.00"), custo=Decimal("600.00")),
+        _item(operacao="542", quantidade=Decimal("2.0000"),
+              total=Decimal("200.00"), custo=Decimal("120.00")),
+    ])
+    db_session.commit()
+
+    resposta = client.get("/faturamento/export?data_inicial=20260101", headers=auth_headers)
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    assert 'filename="faturamento_202601.xlsx"' in resposta.headers["content-disposition"]
+
+    wb = openpyxl.load_workbook(io.BytesIO(resposta.content))
+    assert wb.sheetnames == ["Faturamento", "Resumo", "Por Filial", "Top Produtos"]
+
+    # Aba "Faturamento": A=Filial B=Dia C=Código D=Descrição E=Quantidade
+    # F=Faturamento G=Custo H=Preço Médio I=Lucro Bruto J=Margem K=Markup
+    ws1 = wb["Faturamento"]
+    assert ws1["A1"].value == "Filial"
+    assert ws1["A2"].value == "01"
+    assert ws1["E2"].value == pytest.approx(12.0)
+    assert ws1["F2"].value == pytest.approx(1000.0)
+    assert ws1["G2"].value == pytest.approx(720.0)
+    assert ws1["I2"].value == pytest.approx(280.0)
+    assert ws1["J2"].value == pytest.approx(28.0)  # já multiplicado por 100
+
+    # Aba "Resumo": Margem/Markup Geral usam o formato "%" nativo do Excel
+    # (multiplica por 100 ao exibir), então a célula guarda a fração crua.
+    ws2 = wb["Resumo"]
+    resumo = {ws2.cell(i, 1).value: ws2.cell(i, 2).value for i in range(4, 13)}
+    assert resumo["Total de Registros"] == 1
+    assert resumo["Faturamento Total (R$)"] == pytest.approx(1000.0)
+    assert resumo["Lucro Bruto Total (R$)"] == pytest.approx(280.0)
+    assert resumo["Margem Geral (%)"] == pytest.approx(0.28)
+
+    # Aba "Por Filial": só uma filial, então TOTAL GERAL == a própria linha.
+    ws3 = wb["Por Filial"]
+    assert ws3["A2"].value == "01"
+    assert ws3["C2"].value == pytest.approx(1000.0)
+    assert ws3["A3"].value == "TOTAL GERAL"
+
+    # Aba "Top Produtos": um único produto agregado.
+    ws4 = wb["Top Produtos"]
+    assert ws4["A2"].value == "PROD1"
+    assert ws4["D2"].value == pytest.approx(1000.0)
+
+
+def test_export_aplica_filtros_locais_de_filial_e_produto(client, auth_headers, db_session):
+    # filial/produto na exportação existem só para bater com o que o
+    # usuário vê filtrado na tela da SPA — não são filtros de negócio da
+    # consulta, por isso são aplicados aqui em Python (ver _filtrar_items).
+    db_session.add_all([
+        _produto(codigo="PROD1", descricao="Produto Um"),
+        _produto(codigo="PROD2", descricao="Produto Dois"),
+        _item(filial="01", codigo_produto="PROD1",
+              total=Decimal("1000.00"), custo=Decimal("600.00")),
+        _item(filial="02", codigo_produto="PROD2",
+              total=Decimal("500.00"), custo=Decimal("300.00")),
+    ])
+    db_session.commit()
+
+    resposta_filial = client.get(
+        "/faturamento/export?data_inicial=20260101&filial=01", headers=auth_headers)
+    ws_filial = openpyxl.load_workbook(io.BytesIO(resposta_filial.content))["Faturamento"]
+    filiais = [ws_filial.cell(r, 1).value for r in range(2, ws_filial.max_row + 1)
+               if ws_filial.cell(r, 1).value]
+    assert filiais == ["01"]
+
+    resposta_produto = client.get(
+        "/faturamento/export?data_inicial=20260101&produto=dois", headers=auth_headers)
+    ws_produto = openpyxl.load_workbook(io.BytesIO(resposta_produto.content))["Faturamento"]
+    codigos = [ws_produto.cell(r, 3).value for r in range(2, ws_produto.max_row + 1)
+               if ws_produto.cell(r, 3).value]
+    assert codigos == ["PROD2"]

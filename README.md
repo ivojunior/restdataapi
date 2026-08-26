@@ -94,7 +94,7 @@ Além dos clients desktop (`client/`), o diretório `frontend/` traz uma SPA web
 
 Em produção, a SPA é servida pelo próprio FastAPI (mesma origem — `app.mount`/catch-all em `app/main.py`, ativo só quando `frontend/dist/` existe, gerado por `npm run build`); sem esse build, `/` continua sendo apenas o health-check JSON de sempre. Em desenvolvimento, rode a API (`uvicorn app.main:app --reload`) e o dev server da SPA (`cd frontend && npm run dev`) em paralelo — o Vite faz proxy das chamadas de API para a porta da API (ver `frontend/vite.config.ts`).
 
-Esta SPA está em construção faseada — hoje só o shell (login + navegação) existe; os relatórios em si ainda são portados um de cada vez a partir dos clients desktop equivalentes.
+Esta SPA está em construção faseada — o relatório de **Faturamento** já está completo (piloto da migração: seletor Mês/Ano, filtros de filial/produto, 9 KPIs, 4 gráficos, tabela responsiva, exportar Excel); Cargas, Financeiro e Estoque ainda são portados um de cada vez a partir dos clients desktop equivalentes, reaproveitando os componentes genéricos criados no piloto (`frontend/src/components/`).
 
 ## Executando com Docker
 
@@ -156,6 +156,7 @@ Todos os endpoints são `GET` — não existem rotas `POST`, `PUT` ou `DELETE`.
 | GET    | `/saldos-estoque/`                 | Relatório de saldo de estoque (baseado em `select_estoque_produtos.sql`): saldos (SB2070) com descrição e fator de conversão do produto (SB1000); filtra por `tipo_produto`/`local` |
 | GET    | `/cargas/`                         | Relatório de cargas (baseado em `select_cargas.sql`): itens de carga (DAI070) com veículo (DAK070), cliente (SA1070, com bairro/município) e valor da nota fiscal (SE1070) e, opcionalmente, motorista (DA4070); filtra por `data_inicial`/`data_final`/`status` |
 | GET    | `/faturamento/`                    | Relatório de faturamento (baseado em `select_faturamento.sql`): notas fiscais de saída (SD2070) de produtos acabados (SB1000, `B1_TIPO='PA'`), agregadas por filial/dia do mês/produto; filtra por `data_inicial`/`data_final` |
+| GET    | `/faturamento/export`              | Mesmo relatório acima, sem paginação, como planilha `.xlsx` (4 abas); filtra por `data_inicial`/`data_final`/`filial`/`produto` |
 
 Parâmetros comuns de listagem: `skip`, `limit` (paginação), `order_by` (ex.: `nome` ou `-criado_em` para ordem decrescente) e filtros por campo (ex.: `?filial=01`).
 
@@ -247,11 +248,13 @@ Para itens com `D2_YOPER = '542'/'543'/'544'` (bonificação), o `faturamento` e
 - `data_inicial` (opcional): filtra pela emissão da nota (`D2_EMISSAO`, formato `AAAAMMDD`), trazendo apenas itens com `emissao >= data_inicial`. Sem o parâmetro, assume a data atual do sistema.
 - `data_final` (opcional): filtra por `emissao <= data_final`. Sem o parâmetro, não há limite superior.
 
-> **Risco conhecido, herdado da consulta original:** `margem` (`lucro_bruto / SUM(faturamento) * 100`), `markup` (`lucro_bruto / SUM(custo) * 100`) e `preco_medio` (`SUM(faturamento) / SUM(qtde)`) dividem sem proteção contra zero. Como `faturamento` é sempre zero para bonificação (veja acima), qualquer grupo (filial/dia/produto) com **só bonificação e nenhuma venda** no período tem faturamento total zero (afetando `margem`/`preco_medio`); um grupo cuja soma de `qtde` ou de `custo` dê zero também é possível em tese (item com `D2_QUANT` ou `D2_CUSTO1` zerado, afetando `preco_medio`/`markup`). Em qualquer um desses casos o SQL Server lança um erro de divisão por zero e a requisição falha com `500`. Não foi corrigido aqui (não testável contra SQLite, que não reproduz esse erro — divide por zero retorna `NULL` em vez de lançar exceção) para não alterar o comportamento de `select_faturamento.sql` sem confirmação; se isso acontecer na prática, a correção é envolver os denominadores em `NULLIF(..., 0)`.
+`margem`, `markup` e `preco_medio` podem vir **`null`** — quando o denominador da razão é zero para aquele grupo (ex.: um filial/dia/produto só com bonificação, sem nenhuma venda, tem `faturamento` total zero; `qtde`/`custo` zerados também são possíveis em tese). A consulta original (SQL Server) lançaria "Divide by zero error" nesse caso — risco que era só teórico até aparecer de fato num teste da SPA (piloto de Faturamento, Fase 3 do plano); corrigido envolvendo os denominadores em `NULLIF(x, 0)`, que faz SQL Server e SQLite concordarem (`NULL`, não erro). `null` aqui significa "não é possível calcular essa razão para este grupo", não "zero" — o client deve tratar como tal (ex.: exibir "—", não "0,0%").
 
-Suporta apenas paginação (`skip`, `limit`) e os dois filtros de data acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha (o resultado já é agregado).
+Suporta paginação (`skip`, `limit`) e os dois filtros de data acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha (o resultado já é agregado).
 
-O client desktop deste endpoint é `client/app_faturamento.py` (veja "Clients desktop" abaixo).
+`GET /faturamento/export` gera a planilha `.xlsx` do período inteiro (sem paginação — réplica do client desktop, que carrega tudo antes de exportar), com as mesmas 4 abas de `client/app_faturamento.py` (Faturamento, Resumo, Por Filial, Top Produtos), geradas em `app/excel/faturamento.py` (sem depender de pandas, diferente dos clients desktop — agregações em Python puro). Aceita `data_inicial`/`data_final` (iguais ao endpoint de listagem) e também `filial`/`produto` — únicos aqui, não em `GET /faturamento/` — aplicados em Python após a consulta, só para a exportação bater com o que o usuário está vendo filtrado na tela da SPA (não são filtros de negócio da consulta).
+
+O client desktop deste endpoint é `client/app_faturamento.py` (veja "Clients desktop" abaixo); a SPA (`frontend/`) também já implementa este relatório por completo — foi o piloto da migração (ver "Frontend (SPA)" acima).
 
 ## Clients desktop
 

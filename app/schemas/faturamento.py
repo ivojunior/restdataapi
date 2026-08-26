@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -16,9 +17,13 @@ class FaturamentoRead(BaseModel):
     codigo: str
     descricao: str
     quantidade: Decimal
-    preco_medio: Decimal
+    # None quando o denominador da razão é zero para este grupo (ex.: só
+    # bonificação, sem venda, no mesmo filial/dia/produto — faturamento
+    # zero) — ver o comentário sobre func.nullif em _query_faturamento.
+    # "Não é possível calcular", não "zero".
+    preco_medio: Optional[Decimal]
     faturamento: Decimal
     custo: Decimal
     lucro_bruto: Decimal
-    margem: Decimal
-    markup: Decimal
+    margem: Optional[Decimal]
+    markup: Optional[Decimal]

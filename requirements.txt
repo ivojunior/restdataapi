@@ -10,3 +10,4 @@ python-dotenv>=1.0
 slowapi>=0.1.9
 google-auth>=2.29
 pyjwt>=2.8
+openpyxl>=3.1

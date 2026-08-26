@@ -8,6 +8,7 @@ SPA React + TypeScript + Vite que consome a RestDataAPI, autenticando via login 
 - **Mantine UI** — componentes responsivos (drawer mobile, tabelas, cards); tema em `src/theme.ts`, mapeado da paleta já usada nos clients desktop.
 - **React Router** — roteamento client-side (`BrowserRouter`).
 - **TanStack Query** — cache/estado de dados assíncronos.
+- **Recharts** — gráficos (barras, pizza), adicionado na Fase 3 (piloto de Faturamento).
 - **Google Identity Services** — carregado sob demanda em `src/auth/useGoogleIdentity.ts`, só quando a tela de login é montada.
 
 ## Desenvolvimento local
@@ -38,12 +39,18 @@ Gera `dist/`, servido pelo próprio FastAPI em produção (`app/main.py` monta `
 
 ```
 src/
-├── api/            # cliente HTTP (fetch com credentials:'include')
-├── auth/            # AuthProvider, LoginPage, RequireAuth, integração com o Google Identity Services
-├── components/
-│   └── layout/       # AppLayout (Mantine AppShell), Header, UserMenu
-├── pages/            # uma página por relatório (placeholders até a Fase 3 do plano)
-└── theme.ts           # tema Mantine com a paleta de cores do projeto
+├── api/               # cliente HTTP (fetch com credentials:'include'), tipos comuns (PaginatedResponse)
+├── auth/               # AuthProvider, LoginPage, RequireAuth, integração com o Google Identity Services
+├── components/          # componentes genéricos, escritos uma vez e reaproveitados por cada feature/relatório
+│   ├── layout/            # AppLayout (Mantine AppShell), Header, UserMenu
+│   ├── kpi/                # KpiCard, KpiRow (grid responsivo)
+│   ├── charts/              # HBarChart, PieChartCard, BarChartCard (Recharts) + paleta/tipos compartilhados
+│   ├── data-table/           # ResponsiveTable — tabela ordenável no desktop, cards empilhados no mobile
+│   └── export/                # ExportExcelButton — link para um endpoint /*/export do backend
+├── features/            # um diretório por relatório, só com o que é específico dele
+│   └── faturamento/       # completo (piloto da migração) — Page, hook de dados, kpis.ts, charts.ts, api.ts
+├── pages/                # placeholders "em construção" para os relatórios ainda não portados (Cargas, Financeiro, Estoque)
+└── theme.ts               # tema Mantine com a paleta de cores do projeto
 ```
 
-Os relatórios em si (Faturamento, Cargas, Financeiro, Estoque) ainda não estão implementados — as páginas atuais são placeholders "em construção", conforme o plano faseado (ver plano da sessão que criou este projeto).
+Padrão-chave: tudo em `components/` é genérico (recebe dados/config via props) e não conhece nenhum relatório específico — cada `features/<relatorio>/` só fornece os dados e a configuração (colunas da tabela, séries dos gráficos, fórmulas de KPI). Ao portar o próximo relatório (Cargas, Financeiro ou Estoque), o trabalho é escrever um novo `features/<relatorio>/` seguindo o padrão de `features/faturamento/`, não criar novos componentes de UI do zero.
