@@ -11,12 +11,12 @@ from app.models.item_faturamento import ItemFaturamento
 from app.models.produto import Produto
 from app.schemas.common import PaginatedResponse
 from app.schemas.faturamento import FaturamentoRead
-from app.security import verify_api_key
+from app.security import verify_api_key_or_session
 
 router = APIRouter(
     prefix="/faturamento",
     tags=["Faturamento"],
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_api_key_or_session)],
 )
 
 # Regras de negócio fixas do relatório (réplica de select_faturamento.sql):

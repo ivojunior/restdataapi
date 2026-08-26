@@ -3,19 +3,19 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings
+from app.rate_limit import limiter
 
 logger = logging.getLogger("restdataapi")
 
 from app.routers import (
-    cargas, faturamento, financeiro, fornecedores, produtos, saldos_estoque,
-    titulos_pagar,
+    auth, cargas, faturamento, financeiro, fornecedores, produtos,
+    saldos_estoque, titulos_pagar,
 )
 
 app = FastAPI(
@@ -31,19 +31,28 @@ app = FastAPI(
 
 # Limite de requisições por IP, aplicado a todas as rotas via SlowAPIMiddleware
 # (mitiga brute-force de API key e abuso/DoS acidental). Configurável via
-# RATE_LIMIT_DEFAULT no .env (padrão "100/minute").
-limiter = Limiter(key_func=get_remote_address, default_limits=[settings.rate_limit_default])
+# RATE_LIMIT_DEFAULT no .env (padrão "100/minute"). O `limiter` em si vive em
+# app/rate_limit.py (não aqui) para que routers como app/routers/auth.py
+# possam importá-lo e aplicar limites mais restritos a endpoints específicos
+# sem criar import circular com este módulo.
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+# allow_origins=["*"] (usado até aqui) é incompatível com allow_credentials=True,
+# exigido pelo cookie httpOnly de sessão do login Google — o browser rejeita
+# essa combinação. Sem FRONTEND_ORIGIN configurado (caso comum: a SPA é
+# servida pelo próprio FastAPI, mesma origem, sem precisar de CORS), a lista
+# fica vazia — nenhuma origem cross-site é liberada.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[settings.frontend_origin] if settings.frontend_origin else [],
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", settings.api_key_name],
 )
 
+app.include_router(auth.router)
 app.include_router(titulos_pagar.router)
 app.include_router(fornecedores.router)
 app.include_router(saldos_estoque.router)

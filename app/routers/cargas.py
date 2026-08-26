@@ -15,12 +15,12 @@ from app.models.nota_fiscal_saida import NotaFiscalSaida
 from app.models.veiculo_carga import VeiculoCarga
 from app.schemas.carga import CargaRead
 from app.schemas.common import PaginatedResponse
-from app.security import verify_api_key
+from app.security import verify_api_key_or_session
 
 router = APIRouter(
     prefix="/cargas",
     tags=["Cargas"],
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_api_key_or_session)],
 )
 
 # Regra de negócio fixa do relatório (réplica de select_cargas.sql): sequência

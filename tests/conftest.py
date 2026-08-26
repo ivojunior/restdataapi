@@ -1,6 +1,13 @@
 import os
 
 os.environ.setdefault("API_KEY", "test-key")
+os.environ.setdefault("SESSION_SECRET", "test-session-secret-com-32-bytes-ou-mais")
+os.environ.setdefault("ALLOWED_GOOGLE_DOMAINS", "empresa-teste.com.br")
+os.environ.setdefault("GOOGLE_CLIENT_ID", "test-google-client-id")
+# Secure exige HTTPS; o TestClient conversa em http com um host fake
+# ("testserver") — sem isto o cookie de sessão não seria reenviado nas
+# requisições seguintes dentro do mesmo teste.
+os.environ.setdefault("SESSION_COOKIE_SECURE", "false")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -57,3 +64,26 @@ def db_session():
         yield db
     finally:
         db.close()
+
+
+@pytest.fixture
+def mock_google_id_token(monkeypatch):
+    """Substitui a verificação real do token do Google (que bateria na rede)
+    por uma função controlável pelo teste. Uso:
+
+        mock_google_id_token(email="fulano@empresa-teste.com.br")
+        # ou, para simular token inválido:
+        mock_google_id_token(erro=True)
+    """
+    from app.auth_google import GoogleUserInfo
+
+    def _configurar(email: str = "usuario@empresa-teste.com.br", nome: str = "Usuário Teste",
+                     erro: bool = False):
+        def _fake_verify(credential: str) -> GoogleUserInfo:
+            if erro:
+                raise ValueError("token de teste inválido")
+            return GoogleUserInfo(email=email, nome=nome, hd=email.rsplit("@", 1)[-1])
+
+        monkeypatch.setattr("app.routers.auth.verify_google_id_token", _fake_verify)
+
+    return _configurar

@@ -9,12 +9,12 @@ from app.database import get_db
 from app.models.fornecedor import Fornecedor
 from app.schemas.common import PaginatedResponse
 from app.schemas.fornecedor import FornecedorRead
-from app.security import verify_api_key
+from app.security import verify_api_key_or_session
 
 router = APIRouter(
     prefix="/fornecedores",
     tags=["Fornecedores"],
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_api_key_or_session)],
 )
 
 

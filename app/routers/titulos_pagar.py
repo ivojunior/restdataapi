@@ -9,12 +9,12 @@ from app.database import get_db
 from app.models.titulo_pagar import TituloPagar
 from app.schemas.common import PaginatedResponse
 from app.schemas.titulo_pagar import TituloPagarRead
-from app.security import verify_api_key
+from app.security import verify_api_key_or_session
 
 router = APIRouter(
     prefix="/titulos-pagar",
     tags=["Títulos a Pagar"],
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_api_key_or_session)],
 )
 
 

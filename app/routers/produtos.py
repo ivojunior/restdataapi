@@ -9,12 +9,12 @@ from app.database import get_db
 from app.models.produto import Produto
 from app.schemas.common import PaginatedResponse
 from app.schemas.produto import ProdutoRead
-from app.security import verify_api_key
+from app.security import verify_api_key_or_session
 
 router = APIRouter(
     prefix="/produtos",
     tags=["Produtos"],
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_api_key_or_session)],
 )
 
 
