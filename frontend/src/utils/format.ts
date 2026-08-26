@@ -29,3 +29,20 @@ export function formatarPct(valor: number): string {
 export function paraNumero(valor: string | null): number {
   return valor === null ? NaN : Number(valor)
 }
+
+/** AAAAMMDD (formato das datas do Protheus expostas pela API) -> DD/MM/AAAA.
+ * Réplica de `_fmt_date` em client/app_cargas.py. */
+export function formatarDataBR(aaaammdd: string | null | undefined): string {
+  const s = String(aaaammdd ?? '').trim()
+  if (s.length === 8 && /^\d+$/.test(s)) {
+    return `${s.slice(6, 8)}/${s.slice(4, 6)}/${s.slice(0, 4)}`
+  }
+  return s || '—'
+}
+
+/** motorista/nome_cliente/bairro_cliente/etc. podem vir `null` da API (join
+ * opcional ou campo vazio no cadastro do Protheus) — réplica de `_or_dash`
+ * em client/app_cargas.py, pra não mostrar o texto literal "null". */
+export function ouTraco(valor: string | null | undefined): string {
+  return valor ? valor : '—'
+}

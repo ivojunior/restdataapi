@@ -94,7 +94,7 @@ Além dos clients desktop (`client/`), o diretório `frontend/` traz uma SPA web
 
 Em produção, a SPA é servida pelo próprio FastAPI (mesma origem — `app.mount`/catch-all em `app/main.py`, ativo só quando `frontend/dist/` existe, gerado por `npm run build`); sem esse build, `/` continua sendo apenas o health-check JSON de sempre. Em desenvolvimento, rode a API (`uvicorn app.main:app --reload`) e o dev server da SPA (`cd frontend && npm run dev`) em paralelo — o Vite faz proxy das chamadas de API para a porta da API (ver `frontend/vite.config.ts`).
 
-Esta SPA está em construção faseada — **Faturamento** (piloto da migração) e **Estoque** já estão completos; Cargas e Financeiro ainda são portados um de cada vez a partir dos clients desktop equivalentes, reaproveitando os componentes genéricos criados no piloto (`frontend/src/components/`).
+Esta SPA está em construção faseada — **Faturamento** (piloto da migração), **Estoque** e **Cargas** já estão completos; só **Financeiro** ainda falta, portado a partir do client desktop equivalente e reaproveitando os componentes genéricos criados no piloto (`frontend/src/components/`).
 
 ## Executando com Docker
 
@@ -156,6 +156,7 @@ Todos os endpoints são `GET` — não existem rotas `POST`, `PUT` ou `DELETE`.
 | GET    | `/saldos-estoque/`                 | Relatório de saldo de estoque (baseado em `select_estoque_produtos.sql`): saldos (SB2070) com descrição e fator de conversão do produto (SB1000); filtra por `tipo_produto`/`local` |
 | GET    | `/saldos-estoque/export`           | Mesmo relatório acima, sem paginação, como planilha `.xlsx` (4 abas); filtra por `tipo_produto`/`local`/`filial`/`codigo`/`descricao` |
 | GET    | `/cargas/`                         | Relatório de cargas (baseado em `select_cargas.sql`): itens de carga (DAI070) com veículo (DAK070), cliente (SA1070, com bairro/município) e valor da nota fiscal (SE1070) e, opcionalmente, motorista (DA4070); filtra por `data_inicial`/`data_final`/`status` |
+| GET    | `/cargas/export`                   | Mesmo relatório acima, sem paginação, como planilha `.xlsx` (4 abas); filtra por `data_inicial`/`data_final`/`status`/`filial`/`cliente`/`caminhao` |
 | GET    | `/faturamento/`                    | Relatório de faturamento (baseado em `select_faturamento.sql`): notas fiscais de saída (SD2070) de produtos acabados (SB1000, `B1_TIPO='PA'`), agregadas por filial/dia do mês/produto; filtra por `data_inicial`/`data_final` |
 | GET    | `/faturamento/export`              | Mesmo relatório acima, sem paginação, como planilha `.xlsx` (4 abas); filtra por `data_inicial`/`data_final`/`filial`/`produto` |
 
@@ -232,9 +233,11 @@ CREATE INDEX IX_SE1070_Cargas ON SE1070 (E1_FILIAL, E1_CLIENTE, E1_LOJA, E1_PREF
 
 `SA1070` e `DA4070` são tabelas de cadastro (cliente/motorista) geralmente já indexadas por `FILIAL`+`COD` como chave; confirme com `SET STATISTICS IO/TIME` ou o "Actual Execution Plan" do SSMS antes/depois de aplicar, seguindo o mesmo método já usado para decidir a estratégia da subquery de `SE1070` (ver comentário em `_query_cargas`).
 
-Suporta apenas paginação (`skip`, `limit`) e os filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
+Suporta paginação (`skip`, `limit`) e os filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
 
-O client desktop deste endpoint é `client/app_cargas.py` (veja "Clients desktop" abaixo).
+`GET /cargas/export` gera a planilha `.xlsx` do período inteiro (sem paginação — réplica do client desktop), com as mesmas 4 abas de `client/app_cargas.py` (Cargas, Resumo, Por Filial, Top Clientes), geradas em `app/excel/cargas.py`. Aceita `data_inicial`/`data_final`/`status` (iguais ao endpoint de listagem) e também `filial`/`cliente`/`caminhao` — únicos aqui, aplicados em Python após a consulta, só para a exportação bater com o que a SPA mostra filtrado na tela. Uma "carga" é identificada por `(filial, codigo)` — cada linha da API é um **item** de uma carga (uma carga pode ter vários pedidos/itens), então "quantidade de cargas" nas abas Resumo/Por Filial conta pares `(filial, codigo)` distintos, não linhas.
+
+O client desktop deste endpoint é `client/app_cargas.py` (veja "Clients desktop" abaixo); a SPA (`frontend/`) também já implementa este relatório por completo (ver "Frontend (SPA)" acima), incluindo o destaque visual de linhas com `data` a mais de 3 dias da data atual (réplica da tag `data_distante` do client desktop, generalizada em `ResponsiveTable`/`EstiloLinha` para outros relatórios reaproveitarem — ex. o destaque por status em Financeiro, ainda não portado).
 
 ### `/faturamento/`
 

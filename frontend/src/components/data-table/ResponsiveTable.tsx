@@ -10,16 +10,31 @@ export interface ColunaTabela<T> {
   formatar?: (item: T) => string
 }
 
+/** Estilo de destaque de uma linha — réplica do que os Treeview dos
+ * clients desktop fazem com `tag_configure` (ex.: texto vermelho/negrito
+ * em app_cargas.py para "Data" a mais de 3 dias da data atual; fundo
+ * colorido por status em app_financeiro.py). Aplicado via inline style
+ * (Tr no desktop, Card no mobile), não className — não há folha de
+ * estilos própria para gerar classes aqui. */
+export interface EstiloLinha {
+  corTexto?: string
+  negrito?: boolean
+  corFundo?: string
+}
+
 /** Tabela genérica com um único componente para desktop (Mantine Table,
  * ordenável por clique no cabeçalho — mesmo padrão dos Treeview dos
  * clients desktop) e mobile (lista de cards empilhados, rótulo: valor —
  * evita scroll horizontal ilegível em tela estreita). */
 export function ResponsiveTable<T>({
-  colunas, dados, chaveLinha,
+  colunas, dados, chaveLinha, destacarLinha,
 }: {
   colunas: ColunaTabela<T>[]
   dados: T[]
   chaveLinha: (item: T) => string
+  /** Opcional — quando presente, decide o estilo de cada linha (ver
+   * EstiloLinha). Sem isso, todas as linhas ficam com o estilo padrão. */
+  destacarLinha?: (item: T) => EstiloLinha | undefined
 }) {
   const [ordenacao, setOrdenacao] = useState<{ chave: keyof T; asc: boolean } | null>(null)
   const empilhado = useMediaQuery('(max-width: 48em)') ?? false
@@ -51,22 +66,36 @@ export function ResponsiveTable<T>({
   if (empilhado) {
     return (
       <Stack gap="xs">
-        {dadosOrdenados.map((item) => (
-          <Card key={chaveLinha(item)} withBorder radius="md" padding="sm">
+        {dadosOrdenados.map((item) => {
+          const estilo = destacarLinha?.(item)
+          return (
+          <Card
+            key={chaveLinha(item)}
+            withBorder
+            radius="md"
+            padding="sm"
+            style={{ backgroundColor: estilo?.corFundo }}
+          >
             <Stack gap={4}>
               {colunas.map((coluna) => (
                 <div key={String(coluna.chave)} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <Text size="xs" c="dimmed">
                     {coluna.titulo}
                   </Text>
-                  <Text size="sm" fw={500} ta="right">
+                  <Text
+                    size="sm"
+                    fw={estilo?.negrito ? 700 : 500}
+                    ta="right"
+                    style={estilo?.corTexto ? { color: estilo.corTexto } : undefined}
+                  >
                     {coluna.formatar ? coluna.formatar(item) : String(item[coluna.chave] ?? '')}
                   </Text>
                 </div>
               ))}
             </Stack>
           </Card>
-        ))}
+          )
+        })}
       </Stack>
     )
   }
@@ -96,15 +125,25 @@ export function ResponsiveTable<T>({
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {dadosOrdenados.map((item) => (
-            <Table.Tr key={chaveLinha(item)}>
-              {colunas.map((coluna) => (
-                <Table.Td key={String(coluna.chave)} ta={coluna.align ?? 'left'}>
-                  {coluna.formatar ? coluna.formatar(item) : String(item[coluna.chave] ?? '')}
-                </Table.Td>
-              ))}
-            </Table.Tr>
-          ))}
+          {dadosOrdenados.map((item) => {
+            const estilo = destacarLinha?.(item)
+            return (
+              <Table.Tr
+                key={chaveLinha(item)}
+                style={{
+                  backgroundColor: estilo?.corFundo,
+                  color: estilo?.corTexto,
+                  fontWeight: estilo?.negrito ? 700 : undefined,
+                }}
+              >
+                {colunas.map((coluna) => (
+                  <Table.Td key={String(coluna.chave)} ta={coluna.align ?? 'left'}>
+                    {coluna.formatar ? coluna.formatar(item) : String(item[coluna.chave] ?? '')}
+                  </Table.Td>
+                ))}
+              </Table.Tr>
+            )
+          })}
         </Table.Tbody>
       </Table>
     </ScrollArea>

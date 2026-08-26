@@ -45,13 +45,15 @@ src/
 │   ├── layout/            # AppLayout (Mantine AppShell), Header, UserMenu
 │   ├── kpi/                # KpiCard, KpiRow (grid responsivo)
 │   ├── charts/              # HBarChart, PieChartCard, BarChartCard (Recharts) + paleta/tipos compartilhados
-│   ├── data-table/           # ResponsiveTable — tabela ordenável no desktop, cards empilhados no mobile
+│   ├── data-table/           # ResponsiveTable — tabela ordenável no desktop, cards empilhados no mobile;
+│   │                         # suporta destaque de linha por item (EstiloLinha — cor de texto/negrito/fundo)
 │   └── export/                # ExportExcelButton — link para um endpoint /*/export do backend
 ├── features/            # um diretório por relatório, só com o que é específico dele
 │   ├── faturamento/       # completo (piloto da migração) — Page, hook de dados, kpis.ts, charts.ts, api.ts
-│   └── estoque/            # completo — mesmo padrão do piloto
-├── pages/                # placeholders "em construção" para os relatórios ainda não portados (Cargas, Financeiro)
+│   ├── estoque/            # completo — mesmo padrão do piloto
+│   └── cargas/              # completo — inclui destacarLinha (data > 3 dias vira vermelho/negrito)
+├── pages/                # placeholders "em construção" para os relatórios ainda não portados (Financeiro)
 └── theme.ts               # tema Mantine com a paleta de cores do projeto
 ```
 
-Padrão-chave: tudo em `components/` é genérico (recebe dados/config via props) e não conhece nenhum relatório específico — cada `features/<relatorio>/` só fornece os dados e a configuração (colunas da tabela, séries dos gráficos, fórmulas de KPI). Ao portar o próximo relatório (Cargas ou Financeiro), o trabalho é escrever um novo `features/<relatorio>/` seguindo o padrão de `features/faturamento/`/`features/estoque/`, não criar novos componentes de UI do zero.
+Padrão-chave: tudo em `components/` é genérico (recebe dados/config via props) e não conhece nenhum relatório específico — cada `features/<relatorio>/` só fornece os dados e a configuração (colunas da tabela, séries dos gráficos, fórmulas de KPI). Ao portar o próximo relatório (Financeiro), o trabalho é escrever um novo `features/financeiro/` seguindo o padrão dos relatórios já prontos, não criar novos componentes de UI do zero — inclusive o destaque de linha por status (`ResponsiveTable`'s `destacarLinha`, já usado em `features/cargas/`) deve servir sem alterações, só trocando a regra de negócio.

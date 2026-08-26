@@ -1,13 +1,15 @@
 import enum
 from datetime import date
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 
 from app.database import get_db
+from app.excel.cargas import gerar_excel_cargas
 from app.models.cliente import Cliente
 from app.models.item_carga import ItemCarga
 from app.models.motorista import Motorista
@@ -217,6 +219,51 @@ def _query_cargas(
     return query
 
 
+def _montar_items(linhas) -> List[CargaRead]:
+    return [
+        CargaRead(
+            filial=filial,
+            codigo=codigo,
+            data=data,
+            pedido=pedido,
+            motorista=motorista,
+            cliente=cliente,
+            nome_cliente=nome_cliente,
+            bairro_cliente=bairro_cliente,
+            municipio_cliente=municipio_cliente,
+            peso=peso,
+            nota_fiscal=nota_fiscal,
+            caminhao=caminhao,
+            status_carga=status_carga,
+            valor=valor,
+        )
+        for (
+            filial, codigo, data, pedido, motorista, cliente, peso, nota_fiscal,
+            caminhao, status_carga, nome_cliente, bairro_cliente, municipio_cliente,
+            valor,
+        ) in linhas
+    ]
+
+
+def _filtrar_items(
+    items: List[CargaRead], filial: Optional[str], cliente: Optional[str],
+    caminhao: Optional[str],
+) -> List[CargaRead]:
+    """Filtros locais equivalentes aos do client desktop (filial exata,
+    cliente por substring no nome, caminhão por substring — case-insensitive
+    nos dois últimos) — só para a exportação bater com o que o usuário está
+    vendo filtrado na tela, não filtros de negócio da consulta."""
+    if filial:
+        items = [item for item in items if item.filial == filial]
+    if cliente:
+        termo = cliente.lower()
+        items = [item for item in items if termo in (item.nome_cliente or "").lower()]
+    if caminhao:
+        termo = caminhao.lower()
+        items = [item for item in items if termo in (item.caminhao or "").lower()]
+    return items
+
+
 @router.get("/", response_model=PaginatedResponse[CargaRead])
 def listar_cargas(
     skip: int = 0,
@@ -248,28 +295,44 @@ def listar_cargas(
         .all()
     )
 
-    items = [
-        CargaRead(
-            filial=filial,
-            codigo=codigo,
-            data=data,
-            pedido=pedido,
-            motorista=motorista,
-            cliente=cliente,
-            nome_cliente=nome_cliente,
-            bairro_cliente=bairro_cliente,
-            municipio_cliente=municipio_cliente,
-            peso=peso,
-            nota_fiscal=nota_fiscal,
-            caminhao=caminhao,
-            status_carga=status_carga,
-            valor=valor,
-        )
-        for (
-            filial, codigo, data, pedido, motorista, cliente, peso, nota_fiscal,
-            caminhao, status_carga, nome_cliente, bairro_cliente, municipio_cliente,
-            valor,
-        ) in linhas
-    ]
+    return {"skip": skip, "limit": limit, "items": _montar_items(linhas)}
 
-    return {"skip": skip, "limit": limit, "items": items}
+
+@router.get("/export")
+def exportar_cargas(
+    data_inicial: Optional[str] = Query(
+        None, description="Data mínima da carga, formato AAAAMMDD. Sem o parâmetro, "
+        "assume a data atual do sistema.",
+    ),
+    data_final: Optional[str] = Query(
+        None, description="Data máxima da carga, formato AAAAMMDD.",
+    ),
+    status: Optional[StatusCargaFiltro] = None,
+    filial: Optional[str] = Query(
+        None, description="Filtra pela filial exata (aplicado após a consulta, não em SQL).",
+    ),
+    cliente: Optional[str] = Query(
+        None, description="Filtra pelo nome do cliente (contém, case-insensitive; "
+        "aplicado após a consulta, não em SQL).",
+    ),
+    caminhao: Optional[str] = Query(
+        None, description="Filtra pelo caminhão (contém, case-insensitive; "
+        "aplicado após a consulta, não em SQL).",
+    ),
+    db: Session = Depends(get_db),
+):
+    """Gera a planilha .xlsx do período inteiro (sem paginação — réplica do
+    client desktop, que carrega tudo antes de exportar)."""
+    data_filtro = data_inicial or date.today().strftime("%Y%m%d")
+    query = _query_cargas(db, data_filtro, data_final, status)
+    linhas = query.order_by(
+        ItemCarga.filial, ItemCarga.codigo, ItemCarga.sequencia_carga).all()
+    items = _filtrar_items(_montar_items(linhas), filial, cliente, caminhao)
+
+    planilha = gerar_excel_cargas(items)
+    nome_arquivo = f"cargas_{date.today().strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(
+        planilha,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    )
