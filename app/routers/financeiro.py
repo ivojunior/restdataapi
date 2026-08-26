@@ -13,12 +13,12 @@ from app.models.tipo_operacao import TipoOperacao
 from app.models.titulo_pagar import TituloPagar
 from app.schemas.common import PaginatedResponse
 from app.schemas.financeiro import FinanceiroRead
-from app.security import verify_api_key
+from app.security import verify_api_key_or_session
 
 router = APIRouter(
     prefix="/financeiro",
     tags=["Financeiro"],
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_api_key_or_session)],
 )
 
 # Regra de negócio fixa do relatório (réplica de select_financeiro.sql): exclui

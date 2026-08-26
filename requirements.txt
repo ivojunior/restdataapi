@@ -8,3 +8,5 @@ email-validator>=2.1
 alembic>=1.13
 python-dotenv>=1.0
 slowapi>=0.1.9
+google-auth>=2.29
+pyjwt>=2.8

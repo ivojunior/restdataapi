@@ -23,7 +23,38 @@ class Settings(BaseSettings):
 
     docs_enabled: bool = True
 
+    # Login via Google Workspace (SPA) — coexiste com API Key, nunca a
+    # substitui (ver app/security.py:verify_api_key_or_session).
+    google_client_id: str = ""
+    # Domínios do Google Workspace autorizados a logar, formato
+    # "empresa.com.br,outraempresa.com". Vazio = nega todo mundo (falha
+    # fechado — nunca "permite tudo" por omissão de configuração).
+    allowed_google_domains: str = ""
+    # Segredo para assinar o JWT de sessão próprio da aplicação (não é o
+    # token do Google, que expira em ~1h e não foi desenhado como sessão de
+    # app). Gerar com `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+    session_secret: str = "change-me"
+    session_cookie_name: str = "rda_session"
+    session_ttl_minutes: int = 480  # 8h — uma jornada de trabalho
+    # Cookie Secure exige HTTPS; True em produção. Só desligar em dev local
+    # servindo via http://localhost.
+    session_cookie_secure: bool = True
+    # Origem da SPA, para restringir o CORS (allow_origins=["*"] é
+    # incompatível com allow_credentials=True, exigido pelo cookie de
+    # sessão). Vazio = nenhuma origem cross-site liberada (uso normal
+    # quando a SPA é servida pelo próprio FastAPI, mesma origem).
+    frontend_origin: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    @property
+    def allowed_google_domains_set(self) -> set:
+        """Conjunto de domínios permitidos (lowercase), a partir de allowed_google_domains."""
+        return {
+            item.strip().lower()
+            for item in self.allowed_google_domains.split(",")
+            if item.strip()
+        }
 
     @property
     def api_keys_map(self) -> Dict[str, str]:

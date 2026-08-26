@@ -1,6 +1,6 @@
 # RestDataAPI
 
-API REST construída com **FastAPI** que serve como camada de **leitura de dados** entre um banco **SQL Server** e aplicações clientes. Expõe endpoints somente leitura (`GET`) com autenticação por API Key, paginação, filtros e ordenação.
+API REST construída com **FastAPI** que serve como camada de **leitura de dados** entre um banco **SQL Server** e aplicações clientes. Expõe endpoints somente leitura (`GET`) com autenticação por API Key ou login Google Workspace, paginação, filtros e ordenação.
 
 ## Somente leitura (SELECT) — por design
 
@@ -19,7 +19,10 @@ app/
 ├── main.py           # aplicação FastAPI, middlewares, rotas de health-check
 ├── config.py         # configurações via variáveis de ambiente (.env)
 ├── database.py        # engine SQLAlchemy e sessão de banco
-├── security.py         # verificação de API Key
+├── security.py         # verificação de API Key e/ou sessão de login Google
+├── auth_google.py      # verificação do ID token do Google e checagem de domínio
+├── session.py           # emissão/verificação do JWT de sessão (cookie da SPA)
+├── rate_limit.py        # instância do slowapi Limiter, compartilhada entre main.py e routers
 ├── models/            # modelos SQLAlchemy (tabelas)
 ├── schemas/            # modelos Pydantic (validação de entrada/saída)
 ├── crud/base.py        # operações de leitura (get/list) reutilizadas pelas rotas
@@ -107,11 +110,25 @@ curl -H "X-API-Key: SEU_VALOR_DE_API_KEY" http://localhost:8000/fornecedores/
 
 Opcionalmente, é possível cadastrar **múltiplas chaves nomeadas** (uma por cliente/integração) via `API_KEYS` no `.env`, no formato `cliente1:chave1,cliente2:chave2` — isso permite revogar o acesso de um cliente específico sem invalidar os demais. Quando `API_KEYS` não é definido, a API cai no `API_KEY` único (retrocompatibilidade).
 
+### Login via Google Workspace (SPA)
+
+Além da API Key (usada pelos clients desktop em `client/`), as rotas de dados também aceitam uma **sessão de login via Google** — mecanismo pensado para uma futura SPA web, que não tem como armazenar uma API key com segurança num navegador. Os dois mecanismos coexistem: cada requisição é aceita se tiver **ou** um `X-API-Key` válido **ou** um cookie de sessão válido; nenhum dos dois é exigido junto com o outro, e a API Key continua funcionando exatamente como hoje.
+
+Fluxo (Google Identity Services, ID token — não o Authorization Code flow completo, já que só precisamos de identidade, não de acesso contínuo a outras APIs do Google):
+
+1. O frontend obtém um **ID token** assinado pelo Google (via `google.accounts.id`, com o `GOOGLE_CLIENT_ID` da aplicação) e envia para `POST /auth/google` como `{"credential": "<id_token>"}`.
+2. O backend verifica o token (assinatura, `aud`, `exp`) com a lib `google-auth` — nunca confia em nada vindo do client sem essa verificação — e confere se o **domínio do e-mail** está na allowlist `ALLOWED_GOOGLE_DOMAINS` (`ALLOWED_GOOGLE_DOMAINS` vazio nega todo login, por design — falha fechado).
+3. Se autorizado, o backend emite seu **próprio JWT de sessão** (não repassa o token do Google, que expira em ~1h) assinado com `SESSION_SECRET`, num cookie `httpOnly`+`Secure`+`SameSite=Lax`, válido por `SESSION_TTL_MINUTES` (padrão 8h).
+4. `GET /auth/me` retorna o usuário da sessão atual; `POST /auth/logout` limpa o cookie.
+
+> **Trade-off aceito**: a sessão é *stateless* (não há tabela de sessões) — uma sessão já emitida não pode ser revogada antes de expirar (ex.: um desligamento não derruba na hora uma sessão já aberta, só bloqueia logins futuros). Optamos por isso para não introduzir a primeira tabela própria da aplicação (hoje só existem entidades do Protheus, somente leitura por design) em troca de um TTL curto (8h).
+
 ## Segurança para exposição externa
 
-- **Rate limiting**: todas as rotas têm um limite de requisições por IP (`RATE_LIMIT_DEFAULT` no `.env`, padrão `100/minute`), mitigando brute-force de API key e abuso acidental.
+- **Rate limiting**: todas as rotas têm um limite de requisições por IP (`RATE_LIMIT_DEFAULT` no `.env`, padrão `100/minute`), mitigando brute-force de API key e abuso acidental. `POST /auth/google` tem um limite adicional mais restrito (`10/minute`), por ser o endpoint de entrada do login.
 - **Docs desabilitáveis**: `/docs`, `/redoc` e `/openapi.json` ficam públicos por padrão (sem exigir API Key) para facilitar o desenvolvimento local. Em qualquer ambiente exposto fora da rede interna, defina `DOCS_ENABLED=false` no `.env`.
-- Estas proteções não substituem TLS: se a API for acessada fora de uma rede/VPN confiável, coloque-a atrás de um reverse proxy com HTTPS, já que a API Key trafega em texto claro no header.
+- **CORS**: restrito por padrão (`FRONTEND_ORIGIN` vazio = nenhuma origem cross-site liberada) — necessário porque o cookie de sessão exige `allow_credentials=True`, incompatível com `allow_origins=["*"]` nos navegadores. Só defina `FRONTEND_ORIGIN` se a SPA for hospedada numa origem diferente da API; se ela for servida pelo próprio FastAPI (mesma origem), não é necessário.
+- Estas proteções não substituem TLS: se a API for acessada fora de uma rede/VPN confiável, coloque-a atrás de um reverse proxy com HTTPS, já que a API Key trafega em texto claro no header, e o cookie `Secure` exige HTTPS para ser enviado pelo navegador.
 
 ## Endpoints principais
 

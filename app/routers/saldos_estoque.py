@@ -10,12 +10,12 @@ from app.models.produto import Produto
 from app.models.saldo_estoque import SaldoEstoque
 from app.schemas.common import PaginatedResponse
 from app.schemas.saldo_estoque import SaldoEstoqueRead
-from app.security import verify_api_key
+from app.security import verify_api_key_or_session
 
 router = APIRouter(
     prefix="/saldos-estoque",
     tags=["Saldo de Estoque"],
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_api_key_or_session)],
 )
 
 
