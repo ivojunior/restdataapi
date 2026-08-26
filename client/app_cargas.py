@@ -771,11 +771,14 @@ class CargasApp:
         # a linha — mesmo motivo do comentário acima. Datas inválidas viram
         # NaT (errors="coerce") e a comparação com NaN dá False, então essas
         # linhas simplesmente não ficam vermelhas (sem exceção).
+        #
+        # Só destaca cargas "Aberta": uma carga "Fechada" com data distante
+        # já foi resolvida, não precisa mais chamar atenção do usuário.
         dias_diferenca = (
             pd.to_datetime(df["data"], format="%Y%m%d", errors="coerce")
             - pd.Timestamp(date.today())
         ).dt.days.abs()
-        data_distante = dias_diferenca > 3
+        data_distante = (dias_diferenca > 3) & (df["status_carga"] == "Aberta")
 
         # Desanexa o Treeview da UI durante o insert em massa (grid_remove()
         # preserva as opções de grid, diferente de grid_forget()) — evita

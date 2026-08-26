@@ -33,12 +33,14 @@ const COLUNAS: ColunaTabela<CargaItem>[] = [
   { chave: 'valor', titulo: 'Valor (R$)', align: 'right', formatar: (i) => formatarBRL(Number(i.valor)) },
 ]
 
-// Linhas cuja Data está a mais de 3 dias (pra trás ou pra frente) da data do
-// sistema ficam com o texto em vermelho e negrito — réplica da tag
-// "data_distante" do Treeview em client/app_cargas.py.
+// Linhas de carga "Aberta" cuja Data está a mais de 3 dias (pra trás ou pra
+// frente) da data do sistema ficam com o texto em vermelho e negrito —
+// réplica da tag "data_distante" do Treeview em client/app_cargas.py (uma
+// carga "Fechada" com data distante já foi resolvida, não precisa mais
+// chamar atenção do usuário).
 function destacarLinha(item: CargaItem): EstiloLinha | undefined {
   const dias = diferencaEmDiasDeHoje(item.data)
-  return dias > 3 ? { corTexto: '#e74c3c', negrito: true } : undefined
+  return dias > 3 && item.status_carga === 'Aberta' ? { corTexto: '#e74c3c', negrito: true } : undefined
 }
 
 export function CargasPage() {
