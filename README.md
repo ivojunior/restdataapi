@@ -29,6 +29,8 @@ app/
 └── routers/            # endpoints REST (GET) por entidade
 alembic/                 # migrations do banco de dados
 tests/                   # testes automatizados (pytest + SQLite em memória)
+frontend/                # SPA web (React+Vite+TS) — ver "Frontend (SPA)" abaixo e frontend/README.md
+client/                  # clients desktop (Tkinter) — ver "Clients desktop" abaixo
 ```
 
 ### Tabelas externas (não gerenciadas por este projeto)
@@ -86,9 +88,17 @@ uvicorn app.main:app --reload
 
 A API estará disponível em `http://localhost:8000`, com documentação interativa em `http://localhost:8000/docs` (Swagger) e `http://localhost:8000/redoc`.
 
+## Frontend (SPA)
+
+Além dos clients desktop (`client/`), o diretório `frontend/` traz uma SPA web (React + Vite + TypeScript + Mantine) que consome esta mesma API, autenticando via login Google Workspace em vez de API Key (ver "Login via Google Workspace (SPA)" abaixo). Documentação completa de desenvolvimento em `frontend/README.md`.
+
+Em produção, a SPA é servida pelo próprio FastAPI (mesma origem — `app.mount`/catch-all em `app/main.py`, ativo só quando `frontend/dist/` existe, gerado por `npm run build`); sem esse build, `/` continua sendo apenas o health-check JSON de sempre. Em desenvolvimento, rode a API (`uvicorn app.main:app --reload`) e o dev server da SPA (`cd frontend && npm run dev`) em paralelo — o Vite faz proxy das chamadas de API para a porta da API (ver `frontend/vite.config.ts`).
+
+Esta SPA está em construção faseada — hoje só o shell (login + navegação) existe; os relatórios em si ainda são portados um de cada vez a partir dos clients desktop equivalentes.
+
 ## Executando com Docker
 
-O `docker-compose.yml` sobe a API e um SQL Server local para testes:
+O `docker-compose.yml` sobe a API (que já inclui o build da SPA — o `Dockerfile` tem um estágio Node que builda `frontend/` antes da imagem final da API) e um SQL Server local para testes:
 
 ```bash
 docker compose up --build

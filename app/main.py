@@ -1,8 +1,10 @@
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -77,11 +79,46 @@ def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
     return JSONResponse(status_code=500, content={"detail": "Erro ao acessar o banco de dados"})
 
 
-@app.get("/", tags=["Health"])
-def raiz():
-    return {"nome": "RestDataAPI", "status": "online"}
-
-
 @app.get("/health", tags=["Health"])
 def health():
     return {"status": "ok"}
+
+
+# SPA (frontend/, Vite+React) — servida só se o build (`npm run build`,
+# gerando frontend/dist/) existir. Sem build (dev/test rodando só a API, ou
+# antes da Fase 2 deste projeto), "/" continua sendo o health-check JSON de
+# sempre — nenhuma mudança de comportamento nesse caso.
+#
+# Precisa vir depois de todos os app.include_router() acima — o catch-all
+# abaixo bate com qualquer caminho, então se fosse registrado antes ele
+# capturaria também as rotas de API.
+#
+# StaticFiles(html=True) sozinho NÃO faz o que parece: ele só serve
+# index.html para o caminho raiz ou para diretórios reais, não para
+# qualquer rota desconhecida — uma navegação direta do browser para
+# /faturamento (rota client-side da SPA, sem ser uma chamada de API) daria
+# 404 em vez de carregar a SPA. Por isso: StaticFiles só para /assets
+# (arquivos com hash no nome, geridos pelo Vite) e um catch-all próprio que
+# serve o arquivo estático se ele existir (ex.: /logo.jpg, copiado de
+# frontend/public/ para a raiz do build) ou cai em index.html caso
+# contrário — é o index.html carregado que faz o React Router decidir, no
+# browser, o que renderizar para /faturamento, /cargas etc.
+_frontend_dist = (Path(__file__).resolve().parent.parent / "frontend" / "dist").resolve()
+if _frontend_dist.is_dir():
+    _frontend_assets = _frontend_dist / "assets"
+    if _frontend_assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=_frontend_assets), name="spa-assets")
+
+    @app.get("/{caminho:path}", tags=["Health"], include_in_schema=False)
+    def spa(caminho: str):
+        # `caminho` vem da URL — resolve e confirma que o resultado continua
+        # dentro de _frontend_dist antes de servir, para não abrir um path
+        # traversal (ex.: /../../app/config.py) através deste catch-all.
+        candidato = (_frontend_dist / caminho).resolve()
+        if caminho and candidato.is_file() and candidato.is_relative_to(_frontend_dist):
+            return FileResponse(candidato)
+        return FileResponse(_frontend_dist / "index.html")
+else:
+    @app.get("/", tags=["Health"])
+    def raiz():
+        return {"nome": "RestDataAPI", "status": "online"}
