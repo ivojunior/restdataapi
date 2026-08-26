@@ -4,7 +4,7 @@ import { AppLayout } from './components/layout/AppLayout'
 import { CargasPage } from './features/cargas/CargasPage'
 import { EstoquePage } from './features/estoque/EstoquePage'
 import { FaturamentoPage } from './features/faturamento/FaturamentoPage'
-import { FinanceiroPage } from './pages/FinanceiroPage'
+import { FinanceiroPage } from './features/financeiro/FinanceiroPage'
 
 function App() {
   return (

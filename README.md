@@ -94,7 +94,7 @@ Além dos clients desktop (`client/`), o diretório `frontend/` traz uma SPA web
 
 Em produção, a SPA é servida pelo próprio FastAPI (mesma origem — `app.mount`/catch-all em `app/main.py`, ativo só quando `frontend/dist/` existe, gerado por `npm run build`); sem esse build, `/` continua sendo apenas o health-check JSON de sempre. Em desenvolvimento, rode a API (`uvicorn app.main:app --reload`) e o dev server da SPA (`cd frontend && npm run dev`) em paralelo — o Vite faz proxy das chamadas de API para a porta da API (ver `frontend/vite.config.ts`).
 
-Esta SPA está em construção faseada — **Faturamento** (piloto da migração), **Estoque** e **Cargas** já estão completos; só **Financeiro** ainda falta, portado a partir do client desktop equivalente e reaproveitando os componentes genéricos criados no piloto (`frontend/src/components/`).
+Os quatro relatórios estão completos: **Faturamento** (piloto da migração), **Estoque**, **Cargas** e **Financeiro** (o mais complexo — KPIs com exclusão de recuperação judicial, 4 gráficos principais + 4 abas de resumo com tabela+gráfico, destaque de linha por status e categorização de despesas), todos reaproveitando os mesmos componentes genéricos (`frontend/src/components/`).
 
 ## Executando com Docker
 
@@ -153,6 +153,7 @@ Todos os endpoints são `GET` — não existem rotas `POST`, `PUT` ou `DELETE`.
 | GET    | `/produtos/`                       | Lista produtos (SB1000, filtra por filial/codigo/grupo) |
 | GET    | `/produtos/{rec_no}`               | Obtém um produto pelo `R_E_C_N_O_` |
 | GET    | `/financeiro/`                     | Relatório financeiro (réplica de `select_financeiro.sql`): títulos a pagar (SE2070) com fornecedor (SA2070) e descrição do tipo de operação (PA6000); filtra por `vencimento_de`/`vencimento_ate` |
+| GET    | `/financeiro/export`               | Mesmo relatório acima, sem paginação, como planilha `.xlsx` (8 abas); filtra por `vencimento_de`/`vencimento_ate`/`status`/`filial`/`fornecedor`/`tipo`/`tipo_operacao`/`categoria` |
 | GET    | `/saldos-estoque/`                 | Relatório de saldo de estoque (baseado em `select_estoque_produtos.sql`): saldos (SB2070) com descrição e fator de conversão do produto (SB1000); filtra por `tipo_produto`/`local` |
 | GET    | `/saldos-estoque/export`           | Mesmo relatório acima, sem paginação, como planilha `.xlsx` (4 abas); filtra por `tipo_produto`/`local`/`filial`/`codigo`/`descricao` |
 | GET    | `/cargas/`                         | Relatório de cargas (baseado em `select_cargas.sql`): itens de carga (DAI070) com veículo (DAK070), cliente (SA1070, com bairro/município) e valor da nota fiscal (SE1070) e, opcionalmente, motorista (DA4070); filtra por `data_inicial`/`data_final`/`status` |
@@ -178,6 +179,12 @@ Diferente da consulta original — que fixa o vencimento mínimo em `'20260301'`
 - `status` (opcional): filtra pelo mesmo status já calculado nos clients desktop, com base em `E2_BAIXA`/`E2_VENCREA` — `em_aberto` (sem data de baixa e `vencimento_real >= hoje`), `vencido` (sem data de baixa e `vencimento_real < hoje`) ou `baixado` (com data de baixa preenchida). Sem o parâmetro, não filtra por status. Como `vencimento_de` já começa em hoje por padrão, para ver títulos `vencido` é preciso recuar `vencimento_de`.
 
 Suporta apenas paginação (`skip`, `limit`) e os filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
+
+`GET /financeiro/export` gera a planilha `.xlsx` do período inteiro (sem paginação — réplica do client desktop), com as mesmas 8 abas de `client/app_financeiro.py` (Financeiro, Resumo, Por Fornecedor, Por Tipo de Operação, Resumo por Categoria, Evolução Mensal, Total por Dia, Resumo por Filial), geradas em `app/excel/financeiro.py`. Aceita `vencimento_de`/`vencimento_ate`/`status` (iguais ao endpoint de listagem) e também `filial`/`fornecedor`/`tipo`/`tipo_operacao`/`categoria` — únicos aqui, aplicados em Python após a consulta, só para a exportação bater com o que a SPA mostra filtrado na tela.
+
+A coluna `categoria` (classificação da despesa — ex. "T.I.", "Combustível", "Jurídico") não vem do Protheus: é calculada por regras de correspondência de texto contra fornecedor/histórico, réplica de `client/categorias.py`. As regras (extraídas de `client/categorias.xlsx`) estão duplicadas como JSON estático em dois lugares — `app/excel/data/categorias_financeiro.json` (usado só na exportação Excel) e `frontend/src/features/financeiro/categorias.json` (usado na tela da SPA) — sem nenhum mecanismo que os mantenha sincronizados; editar `categorias.xlsx` não propaga automaticamente para nenhum dos dois.
+
+O client desktop deste endpoint é `client/app_financeiro.py` (veja "Clients desktop" abaixo); a SPA (`frontend/`) também já implementa este relatório por completo (ver "Frontend (SPA)" acima).
 
 ### `/saldos-estoque/`
 
@@ -237,7 +244,7 @@ Suporta paginação (`skip`, `limit`) e os filtros acima — não tem rota de de
 
 `GET /cargas/export` gera a planilha `.xlsx` do período inteiro (sem paginação — réplica do client desktop), com as mesmas 4 abas de `client/app_cargas.py` (Cargas, Resumo, Por Filial, Top Clientes), geradas em `app/excel/cargas.py`. Aceita `data_inicial`/`data_final`/`status` (iguais ao endpoint de listagem) e também `filial`/`cliente`/`caminhao` — únicos aqui, aplicados em Python após a consulta, só para a exportação bater com o que a SPA mostra filtrado na tela. Uma "carga" é identificada por `(filial, codigo)` — cada linha da API é um **item** de uma carga (uma carga pode ter vários pedidos/itens), então "quantidade de cargas" nas abas Resumo/Por Filial conta pares `(filial, codigo)` distintos, não linhas.
 
-O client desktop deste endpoint é `client/app_cargas.py` (veja "Clients desktop" abaixo); a SPA (`frontend/`) também já implementa este relatório por completo (ver "Frontend (SPA)" acima), incluindo o destaque visual de linhas com `data` a mais de 3 dias da data atual (réplica da tag `data_distante` do client desktop, generalizada em `ResponsiveTable`/`EstiloLinha` para outros relatórios reaproveitarem — ex. o destaque por status em Financeiro, ainda não portado).
+O client desktop deste endpoint é `client/app_cargas.py` (veja "Clients desktop" abaixo); a SPA (`frontend/`) também já implementa este relatório por completo (ver "Frontend (SPA)" acima), incluindo o destaque visual de linhas com `data` a mais de 3 dias da data atual (réplica da tag `data_distante` do client desktop, generalizada em `ResponsiveTable`/`EstiloLinha` para outros relatórios reaproveitarem — ex. o destaque por status em Financeiro).
 
 ### `/faturamento/`
 

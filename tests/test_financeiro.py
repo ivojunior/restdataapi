@@ -1,4 +1,8 @@
+import io
 from datetime import date, timedelta
+
+import openpyxl
+import pytest
 
 from app.models.fornecedor import Fornecedor
 from app.models.tipo_operacao import TipoOperacao
@@ -260,3 +264,94 @@ def test_metodos_de_escrita_nao_existem(client, auth_headers):
     assert client.post("/financeiro/", json={}, headers=auth_headers).status_code == 405
     assert client.put("/financeiro/", json={}, headers=auth_headers).status_code == 405
     assert client.delete("/financeiro/", headers=auth_headers).status_code == 405
+
+
+def test_export_gera_planilha_com_8_abas_e_valores_corretos(client, auth_headers, db_session):
+    db_session.add_all([_fornecedor(), _tipo_operacao(), _titulo()])
+    db_session.commit()
+
+    resposta = client.get("/financeiro/export", headers=auth_headers)
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    assert "filename=" in resposta.headers["content-disposition"]
+
+    wb = openpyxl.load_workbook(io.BytesIO(resposta.content))
+    assert wb.sheetnames == [
+        "Financeiro", "Resumo", "Por Fornecedor", "Por Tipo de Operação",
+        "Resumo por Categoria", "Evolução Mensal", "Total por Dia", "Resumo por Filial",
+    ]
+
+    # Aba "Financeiro": A=Filial B=Número ... G=Fornecedor H=Categoria ...
+    # L=Valor M=Saldo ... P=Status
+    ws1 = wb["Financeiro"]
+    assert ws1["A1"].value == "Filial"
+    assert ws1["A2"].value == "01"
+    assert ws1["G2"].value == "Fornecedor Exemplo Ltda"
+    # sem regra correspondente no fornecedor de teste -> "Não Classificado"
+    assert ws1["H2"].value == "Não Classificado"
+    assert ws1["L2"].value == pytest.approx(1000.0)
+    # vencimento_real = hoje, sem data_baixa -> "Em aberto"
+    assert ws1["P2"].value == "Em aberto"
+
+    ws2 = wb["Resumo"]
+    assert ws2.cell(4, 1).value == "Total de Títulos"
+    assert ws2.cell(4, 2).value == 1
+
+    ws3 = wb["Por Fornecedor"]
+    assert ws3["A2"].value == "Fornecedor Exemplo Ltda"
+
+    ws4 = wb["Por Tipo de Operação"]
+    assert ws4["A2"].value == "Compra de Mercadoria"
+
+    ws5 = wb["Resumo por Categoria"]
+    assert ws5.cell(5, 1).value == "Não Classificado"
+
+    ws7 = wb["Total por Dia"]
+    assert ws7.cell(5, 1).value is not None  # data de vencimento formatada
+
+    # "Resumo por Filial" usa hdr_row=3 (diferente das outras abas, que
+    # usam 4) — réplica fiel de hdr_row7 em client/app_financeiro.py.
+    ws8 = wb["Resumo por Filial"]
+    assert ws8.cell(3, 1).value == "Filial"
+    assert ws8.cell(4, 1).value == "01"
+
+
+def test_export_categoriza_fornecedor_conhecido(client, auth_headers, db_session):
+    # "TOTVS" está nas regras reais extraídas de client/categorias.xlsx
+    # (ver app/excel/data/categorias_financeiro.json) — confirma que a
+    # categorização de verdade (não só o fallback "Não Classificado") funciona.
+    db_session.add_all([
+        _fornecedor(codigo="000124", nome="TOTVS"),
+        _titulo(fornecedor="000124", nome_fornecedor="TOTVS"),
+    ])
+    db_session.commit()
+
+    resposta = client.get("/financeiro/export", headers=auth_headers)
+    ws1 = openpyxl.load_workbook(io.BytesIO(resposta.content))["Financeiro"]
+    assert ws1["H2"].value == "T.I."
+
+
+def test_export_aplica_filtros_locais(client, auth_headers, db_session):
+    db_session.add_all([
+        _fornecedor(codigo="000123", nome="Fornecedor Um"),
+        _tipo_operacao(),
+        _titulo(numero="000001", filial="01", fornecedor="000123",
+                nome_fornecedor="Fornecedor Um", tipo="NF"),
+        _fornecedor(codigo="000124", nome="Fornecedor Dois"),
+        _titulo(numero="000002", filial="02", fornecedor="000124",
+                nome_fornecedor="Fornecedor Dois", tipo="NF"),
+    ])
+    db_session.commit()
+
+    resposta_filial = client.get("/financeiro/export?filial=01", headers=auth_headers)
+    ws_filial = openpyxl.load_workbook(io.BytesIO(resposta_filial.content))["Financeiro"]
+    filiais = [ws_filial.cell(r, 1).value for r in range(2, ws_filial.max_row + 1)
+               if ws_filial.cell(r, 1).value]
+    assert filiais == ["01"]
+
+    resposta_forn = client.get("/financeiro/export?fornecedor=dois", headers=auth_headers)
+    ws_forn = openpyxl.load_workbook(io.BytesIO(resposta_forn.content))["Financeiro"]
+    fornecedores = [ws_forn.cell(r, 7).value for r in range(2, ws_forn.max_row + 1)
+                    if ws_forn.cell(r, 7).value]
+    assert fornecedores == ["Fornecedor Dois"]

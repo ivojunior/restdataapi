@@ -8,7 +8,7 @@ SPA React + TypeScript + Vite que consome a RestDataAPI, autenticando via login 
 - **Mantine UI** — componentes responsivos (drawer mobile, tabelas, cards); tema em `src/theme.ts`, mapeado da paleta já usada nos clients desktop.
 - **React Router** — roteamento client-side (`BrowserRouter`).
 - **TanStack Query** — cache/estado de dados assíncronos.
-- **Recharts** — gráficos (barras, pizza), adicionado na Fase 3 (piloto de Faturamento).
+- **Recharts** — gráficos (barras, pizza, barras empilhadas), adicionado na Fase 3 (piloto de Faturamento).
 - **Google Identity Services** — carregado sob demanda em `src/auth/useGoogleIdentity.ts`, só quando a tela de login é montada.
 
 ## Desenvolvimento local
@@ -43,17 +43,24 @@ src/
 ├── auth/               # AuthProvider, LoginPage, RequireAuth, integração com o Google Identity Services
 ├── components/          # componentes genéricos, escritos uma vez e reaproveitados por cada feature/relatório
 │   ├── layout/            # AppLayout (Mantine AppShell), Header, UserMenu
-│   ├── kpi/                # KpiCard, KpiRow (grid responsivo)
-│   ├── charts/              # HBarChart, PieChartCard, BarChartCard (Recharts) + paleta/tipos compartilhados
+│   ├── kpi/                # KpiCard (com sublinha opcional, ex. "qtd + saldo"), KpiRow (grid responsivo)
+│   ├── charts/              # HBarChart, PieChartCard, BarChartCard, StackedBarChartCard (Recharts) —
+│   │                         # os três primeiros aceitam `corPorRotulo` opcional para cor fixa por rótulo
+│   │                         # (ex. cor de status/categoria), em vez de ciclar a paleta padrão
 │   ├── data-table/           # ResponsiveTable — tabela ordenável no desktop, cards empilhados no mobile;
 │   │                         # suporta destaque de linha por item (EstiloLinha — cor de texto/negrito/fundo)
 │   └── export/                # ExportExcelButton — link para um endpoint /*/export do backend
-├── features/            # um diretório por relatório, só com o que é específico dele
-│   ├── faturamento/       # completo (piloto da migração) — Page, hook de dados, kpis.ts, charts.ts, api.ts
-│   ├── estoque/            # completo — mesmo padrão do piloto
-│   └── cargas/              # completo — inclui destacarLinha (data > 3 dias vira vermelho/negrito)
-├── pages/                # placeholders "em construção" para os relatórios ainda não portados (Financeiro)
-└── theme.ts               # tema Mantine com a paleta de cores do projeto
+└── features/            # um diretório por relatório, só com o que é específico dele
+    ├── faturamento/       # completo (piloto da migração) — Page, hook de dados, kpis.ts, charts.ts, api.ts
+    ├── estoque/            # completo — mesmo padrão do piloto
+    ├── cargas/              # completo — inclui destacarLinha (data > 3 dias vira vermelho/negrito)
+    └── financeiro/          # completo — o mais complexo: KPIs com exclusão de recuperação judicial
+                              # (kpis.ts), 4 gráficos principais (charts.ts) + 4 abas de resumo com
+                              # tabela+gráfico (resumos.ts: categoria/filial/evolução mensal/total por dia),
+                              # destaque de linha por status, e categorização de despesas (categorizacao.ts,
+                              # a partir de categorias.json — cópia estática duplicada com
+                              # app/excel/data/categorias_financeiro.json no backend; ver nota de risco de
+                              # divergência em ambos os arquivos e no README.md da raiz)
 ```
 
-Padrão-chave: tudo em `components/` é genérico (recebe dados/config via props) e não conhece nenhum relatório específico — cada `features/<relatorio>/` só fornece os dados e a configuração (colunas da tabela, séries dos gráficos, fórmulas de KPI). Ao portar o próximo relatório (Financeiro), o trabalho é escrever um novo `features/financeiro/` seguindo o padrão dos relatórios já prontos, não criar novos componentes de UI do zero — inclusive o destaque de linha por status (`ResponsiveTable`'s `destacarLinha`, já usado em `features/cargas/`) deve servir sem alterações, só trocando a regra de negócio.
+Padrão-chave: tudo em `components/` é genérico (recebe dados/config via props) e não conhece nenhum relatório específico — cada `features/<relatorio>/` só fornece os dados e a configuração (colunas da tabela, séries dos gráficos, fórmulas de KPI). Os quatro relatórios já seguem esse padrão; ao portar um relatório novo no futuro, o trabalho é escrever um `features/<relatorio>/` seguindo o mesmo modelo, não criar componentes de UI do zero.

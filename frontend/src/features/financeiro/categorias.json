@@ -1,0 +1,617 @@
+[
+  {
+    "fornecedor": "58.640.232 KAWANNY E",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "60.132.893 MILENA SA",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "64.073.032IVANILDOMA",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "ABC HIDRAULICA",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "ACOMAIS LTDA",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "ACTIVE SEGURANCA ELE",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "ADVOCACIA PIMENTEL",
+    "historico": "",
+    "categoria": "Jurídico"
+  },
+  {
+    "fornecedor": "AGF CONSULTORIA",
+    "historico": "",
+    "categoria": "Prestador de Serviço"
+  },
+  {
+    "fornecedor": "AGIBEN BENEFICIOS LT",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "ALGAR TELECOM S/A",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "ALINCA ESQUADRIA",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "ALIRIO MORAES",
+    "historico": "",
+    "categoria": "Jurídico"
+  },
+  {
+    "fornecedor": "ALMIR FRADIQUE DE AL",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "APREDILETA CENTER",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "ARMAZEM CORAL",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "ARMAZEM SITIO NOVO",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "ARQUIVEI",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "ASSAI ATACADISTA",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "ASSOCIACAO PERNAMBUC",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "AURE INFORMATICA",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "B.SHOP TECNOLOGIA",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "BANKTEC COMERCIO LTD",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "BC COM.DE PECAS E SE",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "BELEM AUTO PECAS E E",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "BR DIGITAL TELECOM",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "BSFRIO",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "CAIXA PEQUENO",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "CAR PLUS VEICULOS LT",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "CAROATA HOME CENTER",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "CASA DO BORRACHEIRO",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "CELPE",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "CENTRAL DA CONST",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "CILO DETETIZACOES",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "CLARO",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "CLIN - PLANO ODONT.",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "COMERCIAL JURIVAN",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "COMPESA",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "CONDOMINIO DO EDF. B",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "CONEXFER",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "CONTROL INFORMATICA",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "CREATIVE SISTEMAS",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "DETRAN",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "DISTRIBUIDORA DE AGU",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "ECONET",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "ECONET SOLUCOES E SE",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "ESPERANCA NORDESTE",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "EXODO LIMPEZA",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "EXTINNBAT",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "FERREIRA COSTA CIA .",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "FORTPEL",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "GLOBAL MOTOS ATACADO",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "GRUPO API",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "HABILITE SERVICOS",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "HAPVIDA",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "HC PNEUS",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "HEBROM CONSTRUCOES L",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "INMETRO",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "INTERSYS TECNOLOGIA",
+    "historico": "",
+    "categoria": "Prestador de Serviço"
+  },
+  {
+    "fornecedor": "IPROSTORE",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "IRON MOUNTAIN BRASIL",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "IVALDA ALMEIDA DE SO",
+    "historico": "",
+    "categoria": "Prestador de Serviço"
+  },
+  {
+    "fornecedor": "J J MOLAS",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "JATOBARRETTO CENTRO",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "JC EXTINTORES",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "L2BR",
+    "historico": "",
+    "categoria": "Jurídico"
+  },
+  {
+    "fornecedor": "LIG-CONTATO DIARIO F",
+    "historico": "",
+    "categoria": "Jurídico"
+  },
+  {
+    "fornecedor": "LUIS GUSTAVO SABINO",
+    "historico": "",
+    "categoria": "Jurídico"
+  },
+  {
+    "fornecedor": "LUIZ ANDREY OLIVEIR",
+    "historico": "",
+    "categoria": "Jurídico"
+  },
+  {
+    "fornecedor": "MADEIREIRA SAO JOSE",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "MADIS",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "MARITEL",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "MATOS ADVOGADOS",
+    "historico": "",
+    "categoria": "Jurídico"
+  },
+  {
+    "fornecedor": "MB PARABRISAS",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "MEGA DEDETIZACAO",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "METLIFE PLANOS",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "MOLAS NORDESTE",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "NADJA ISABELLA C. DA",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "OI",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "ONLINE DATA CLOUND",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "PARAIBA VIAGENS",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "PAULO DE PAIVA AZEVE",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "PLUXEE BENEFICIOS BR",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "PNEU 1000",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "POPULINE TELECOM SER",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "POSTO IPIRANGAO",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "POWER CHIPS",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "PPK ASSESSORIA E GES",
+    "historico": "",
+    "categoria": "Jurídico"
+  },
+  {
+    "fornecedor": "PRESERVE SEG E TRASN",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "PRODUTIVA",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "PROTECT",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "QUEIROZ & SERENO CON",
+    "historico": "",
+    "categoria": "Jurídico"
+  },
+  {
+    "fornecedor": "R M CARGO",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "RAJ TECNOLOGIA LTDA",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "RECUPERA SOLUCOES EM",
+    "historico": "",
+    "categoria": "Jurídico"
+  },
+  {
+    "fornecedor": "REDIESEL",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "RENATO CANUTO NETO S",
+    "historico": "",
+    "categoria": "Jurídico"
+  },
+  {
+    "fornecedor": "RENOVE",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "RM LOC SERVICE",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "ROBERTO ANTONIO ALV",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "ROBSON FERNANDES DA",
+    "historico": "",
+    "categoria": "Prestador de Serviço"
+  },
+  {
+    "fornecedor": "RODOTEC LTDA",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "SAFETEC",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "SEC DA FAZENDA PE",
+    "historico": "",
+    "categoria": "Imposto"
+  },
+  {
+    "fornecedor": "SEGUROS SURA S.A",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "SIGA MAIS",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "SKY.ONE TECNOLOGIA E",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "SOCIEDADE AGUIAR LEI",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "SOLIVETTI",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "TAGUS TEC",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "TARGET ENGENHARIA LT",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "TERRA LIMPA",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "THIAGO LUIZ DA SILVA",
+    "historico": "",
+    "categoria": "Outros"
+  },
+  {
+    "fornecedor": "TICKET LOG",
+    "historico": "",
+    "categoria": "Combustível"
+  },
+  {
+    "fornecedor": "TOTVS",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "TRUCK DIESEL",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "TRUCK-CAR",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "UNAUDO UNA",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "UNIAO",
+    "historico": "",
+    "categoria": "Imposto"
+  },
+  {
+    "fornecedor": "VALE TRANSPORTE",
+    "historico": "",
+    "categoria": "Fornecedor"
+  },
+  {
+    "fornecedor": "VALORE CONSULTORES A",
+    "historico": "",
+    "categoria": "Prestador de Serviço"
+  },
+  {
+    "fornecedor": "VANGAS",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  },
+  {
+    "fornecedor": "VIPER TECNOLOGIA LTD",
+    "historico": "",
+    "categoria": "T.I."
+  },
+  {
+    "fornecedor": "ZAQUEU GAS E AGUA",
+    "historico": "",
+    "categoria": "Manutenção Automotiva"
+  }
+]
