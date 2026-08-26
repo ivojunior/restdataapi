@@ -94,7 +94,7 @@ Além dos clients desktop (`client/`), o diretório `frontend/` traz uma SPA web
 
 Em produção, a SPA é servida pelo próprio FastAPI (mesma origem — `app.mount`/catch-all em `app/main.py`, ativo só quando `frontend/dist/` existe, gerado por `npm run build`); sem esse build, `/` continua sendo apenas o health-check JSON de sempre. Em desenvolvimento, rode a API (`uvicorn app.main:app --reload`) e o dev server da SPA (`cd frontend && npm run dev`) em paralelo — o Vite faz proxy das chamadas de API para a porta da API (ver `frontend/vite.config.ts`).
 
-Esta SPA está em construção faseada — o relatório de **Faturamento** já está completo (piloto da migração: seletor Mês/Ano, filtros de filial/produto, 9 KPIs, 4 gráficos, tabela responsiva, exportar Excel); Cargas, Financeiro e Estoque ainda são portados um de cada vez a partir dos clients desktop equivalentes, reaproveitando os componentes genéricos criados no piloto (`frontend/src/components/`).
+Esta SPA está em construção faseada — **Faturamento** (piloto da migração) e **Estoque** já estão completos; Cargas e Financeiro ainda são portados um de cada vez a partir dos clients desktop equivalentes, reaproveitando os componentes genéricos criados no piloto (`frontend/src/components/`).
 
 ## Executando com Docker
 
@@ -154,6 +154,7 @@ Todos os endpoints são `GET` — não existem rotas `POST`, `PUT` ou `DELETE`.
 | GET    | `/produtos/{rec_no}`               | Obtém um produto pelo `R_E_C_N_O_` |
 | GET    | `/financeiro/`                     | Relatório financeiro (réplica de `select_financeiro.sql`): títulos a pagar (SE2070) com fornecedor (SA2070) e descrição do tipo de operação (PA6000); filtra por `vencimento_de`/`vencimento_ate` |
 | GET    | `/saldos-estoque/`                 | Relatório de saldo de estoque (baseado em `select_estoque_produtos.sql`): saldos (SB2070) com descrição e fator de conversão do produto (SB1000); filtra por `tipo_produto`/`local` |
+| GET    | `/saldos-estoque/export`           | Mesmo relatório acima, sem paginação, como planilha `.xlsx` (4 abas); filtra por `tipo_produto`/`local`/`filial`/`codigo`/`descricao` |
 | GET    | `/cargas/`                         | Relatório de cargas (baseado em `select_cargas.sql`): itens de carga (DAI070) com veículo (DAK070), cliente (SA1070, com bairro/município) e valor da nota fiscal (SE1070) e, opcionalmente, motorista (DA4070); filtra por `data_inicial`/`data_final`/`status` |
 | GET    | `/faturamento/`                    | Relatório de faturamento (baseado em `select_faturamento.sql`): notas fiscais de saída (SD2070) de produtos acabados (SB1000, `B1_TIPO='PA'`), agregadas por filial/dia do mês/produto; filtra por `data_inicial`/`data_final` |
 | GET    | `/faturamento/export`              | Mesmo relatório acima, sem paginação, como planilha `.xlsx` (4 abas); filtra por `data_inicial`/`data_final`/`filial`/`produto` |
@@ -189,7 +190,11 @@ Diferente de `/financeiro/`, o tipo de produto e o armazém **não são fixos** 
 - `tipo_produto` (opcional): filtra pelo tipo do produto (`B1_TIPO`), ex. `PA` (produto acabado) ou `AM` (vasilhame). Sem o parâmetro, traz qualquer tipo.
 - `local` (opcional): filtra pelo armazém (`B2_LOCAL`), ex. `01` ou `20`. Sem o parâmetro, traz qualquer armazém.
 
-O campo `quantidade` replica `B2_QATU / B1_CONV` da consulta original (quantidade convertida pela unidade de medida do produto). Suporta apenas paginação (`skip`, `limit`) e os dois filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
+O campo `quantidade` replica `B2_QATU / B1_CONV` da consulta original (quantidade convertida pela unidade de medida do produto). Suporta paginação (`skip`, `limit`) e os dois filtros acima — não tem rota de detalhe por id, pois o `SELECT` original não expõe um identificador único de linha.
+
+`GET /saldos-estoque/export` gera a planilha `.xlsx` do recorte inteiro (sem paginação — réplica do client desktop), com as mesmas 4 abas de `client/app_estoque.py` (Estoque, Resumo, Por Filial, Top Produtos), geradas em `app/excel/estoque.py`. Aceita `tipo_produto`/`local` (iguais ao endpoint de listagem) e também `filial`/`codigo`/`descricao` — únicos aqui, aplicados em Python após a consulta, só para a exportação bater com o que a SPA mostra filtrado na tela.
+
+O client desktop deste endpoint é `client/app_estoque.py` (veja "Clients desktop" abaixo); a SPA (`frontend/`) também já implementa este relatório por completo (ver "Frontend (SPA)" acima).
 
 ### `/cargas/`
 

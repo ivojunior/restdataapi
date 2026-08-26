@@ -48,9 +48,10 @@ src/
 │   ├── data-table/           # ResponsiveTable — tabela ordenável no desktop, cards empilhados no mobile
 │   └── export/                # ExportExcelButton — link para um endpoint /*/export do backend
 ├── features/            # um diretório por relatório, só com o que é específico dele
-│   └── faturamento/       # completo (piloto da migração) — Page, hook de dados, kpis.ts, charts.ts, api.ts
-├── pages/                # placeholders "em construção" para os relatórios ainda não portados (Cargas, Financeiro, Estoque)
+│   ├── faturamento/       # completo (piloto da migração) — Page, hook de dados, kpis.ts, charts.ts, api.ts
+│   └── estoque/            # completo — mesmo padrão do piloto
+├── pages/                # placeholders "em construção" para os relatórios ainda não portados (Cargas, Financeiro)
 └── theme.ts               # tema Mantine com a paleta de cores do projeto
 ```
 
-Padrão-chave: tudo em `components/` é genérico (recebe dados/config via props) e não conhece nenhum relatório específico — cada `features/<relatorio>/` só fornece os dados e a configuração (colunas da tabela, séries dos gráficos, fórmulas de KPI). Ao portar o próximo relatório (Cargas, Financeiro ou Estoque), o trabalho é escrever um novo `features/<relatorio>/` seguindo o padrão de `features/faturamento/`, não criar novos componentes de UI do zero.
+Padrão-chave: tudo em `components/` é genérico (recebe dados/config via props) e não conhece nenhum relatório específico — cada `features/<relatorio>/` só fornece os dados e a configuração (colunas da tabela, séries dos gráficos, fórmulas de KPI). Ao portar o próximo relatório (Cargas ou Financeiro), o trabalho é escrever um novo `features/<relatorio>/` seguindo o padrão de `features/faturamento/`/`features/estoque/`, não criar novos componentes de UI do zero.

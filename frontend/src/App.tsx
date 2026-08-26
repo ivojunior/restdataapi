@@ -1,9 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { RequireAuth } from './auth/RequireAuth'
 import { AppLayout } from './components/layout/AppLayout'
+import { EstoquePage } from './features/estoque/EstoquePage'
 import { FaturamentoPage } from './features/faturamento/FaturamentoPage'
 import { CargasPage } from './pages/CargasPage'
-import { EstoquePage } from './pages/EstoquePage'
 import { FinanceiroPage } from './pages/FinanceiroPage'
 
 function App() {

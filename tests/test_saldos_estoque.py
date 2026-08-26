@@ -1,4 +1,8 @@
+import io
 from decimal import Decimal
+
+import openpyxl
+import pytest
 
 from app.models.produto import Produto
 from app.models.saldo_estoque import SaldoEstoque
@@ -156,3 +160,67 @@ def test_metodos_de_escrita_nao_existem(client, auth_headers):
     assert client.post("/saldos-estoque/", json={}, headers=auth_headers).status_code == 405
     assert client.put("/saldos-estoque/", json={}, headers=auth_headers).status_code == 405
     assert client.delete("/saldos-estoque/", headers=auth_headers).status_code == 405
+
+
+def test_export_gera_planilha_com_4_abas_e_valores_corretos(client, auth_headers, db_session):
+    db_session.add_all([
+        _produto(codigo="PROD001", descricao="Produto Um"),
+        _saldo(codigo_produto="PROD001", filial="01",
+               saldo_atual=Decimal("120.0000"), valor_atual=Decimal("3500.00")),
+    ])
+    db_session.commit()
+
+    resposta = client.get("/saldos-estoque/export", headers=auth_headers)
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    assert "filename=" in resposta.headers["content-disposition"]
+
+    wb = openpyxl.load_workbook(io.BytesIO(resposta.content))
+    assert wb.sheetnames == ["Estoque", "Resumo", "Por Filial", "Top Produtos"]
+
+    # Aba "Estoque": A=Filial B=Local C=Código Produto D=Descrição
+    # E=Quantidade F=Valor Atual
+    ws1 = wb["Estoque"]
+    assert ws1["A1"].value == "Filial"
+    assert ws1["A2"].value == "01"
+    assert ws1["C2"].value == "PROD001"
+    assert ws1["E2"].value == pytest.approx(120.0)
+    assert ws1["F2"].value == pytest.approx(3500.0)
+
+    ws2 = wb["Resumo"]
+    resumo = {ws2.cell(i, 1).value: ws2.cell(i, 2).value for i in range(4, 9)}
+    assert resumo["Total de Itens"] == 1
+    assert resumo["Valor Total (R$)"] == pytest.approx(3500.0)
+    assert resumo["Valor Médio por Item (R$)"] == pytest.approx(3500.0 / 120.0)
+
+    ws3 = wb["Por Filial"]
+    assert ws3["A2"].value == "01"
+    assert ws3["A3"].value == "TOTAL GERAL"
+
+    ws4 = wb["Top Produtos"]
+    assert ws4["A2"].value == "PROD001"
+
+
+def test_export_aplica_filtros_locais_de_filial_codigo_e_descricao(client, auth_headers, db_session):
+    db_session.add_all([
+        _produto(codigo="PROD001", descricao="Parafuso Sextavado"),
+        _saldo(codigo_produto="PROD001", filial="01"),
+        _produto(codigo="PROD002", descricao="Porca Sextavada"),
+        _saldo(codigo_produto="PROD002", filial="02"),
+    ])
+    db_session.commit()
+
+    resposta_filial = client.get(
+        "/saldos-estoque/export?filial=01", headers=auth_headers)
+    ws_filial = openpyxl.load_workbook(io.BytesIO(resposta_filial.content))["Estoque"]
+    filiais = [ws_filial.cell(r, 1).value for r in range(2, ws_filial.max_row + 1)
+               if ws_filial.cell(r, 1).value]
+    assert filiais == ["01"]
+
+    resposta_descricao = client.get(
+        "/saldos-estoque/export?descricao=porca", headers=auth_headers)
+    ws_desc = openpyxl.load_workbook(io.BytesIO(resposta_descricao.content))["Estoque"]
+    codigos = [ws_desc.cell(r, 3).value for r in range(2, ws_desc.max_row + 1)
+               if ws_desc.cell(r, 3).value]
+    assert codigos == ["PROD002"]
