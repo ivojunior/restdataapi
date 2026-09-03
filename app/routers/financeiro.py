@@ -101,6 +101,18 @@ def _montar_items(linhas) -> List[FinanceiroRead]:
     for titulo, descricao_operacao in linhas:
         item = FinanceiroRead.model_validate(titulo)
         item.descricao_operacao = descricao_operacao
+        # Réplica de select_financeiro.sql: "valor" não é mais E2_VALOR puro,
+        # e sim a soma dele com as retenções/tributos do título. `or 0` cobre
+        # títulos com essas colunas nulas (no SQL Server, NULL + número
+        # resultaria em NULL — aqui tratamos como 0 para não quebrar `valor`,
+        # que a API sempre expôs como não-nulo).
+        item.valor = (
+            titulo.valor
+            + (titulo.irrf or 0)
+            + (titulo.csll or 0)
+            + (titulo.pis or 0)
+            + (titulo.cofins or 0)
+        )
         items.append(item)
     return items
 

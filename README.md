@@ -172,6 +172,8 @@ Baseado no `SELECT` de `select_financeiro.sql`: junta `SE2070` (títulos a pagar
 - Apenas títulos não excluídos (`D_E_L_E_T_ != '*'`);
 - `tipo` fora de `PA`, `PR`, `NDF`.
 
+O campo `valor` da resposta **não é mais a coluna bruta `E2_VALOR`**: é a soma dela com as retenções/tributos do título — `E2_IRRF + E2_CSLL + E2_PIS + E2_COFINS + E2_VALOR`, réplica da expressão atual de `select_financeiro.sql`. Essas quatro colunas (`irrf`/`csll`/`pis`/`cofins`) foram adicionadas a `TituloPagar` (`app/models/titulo_pagar.py`) só para esse cálculo — não são expostas como campos próprios da resposta. `saldo` continua vindo direto de `E2_SALDO`, sem soma. Colunas nulas nessa soma são tratadas como `0` (não como `NULL`, diferente do comportamento do SQL Server), para que `valor` continue sempre não-nulo.
+
 Diferente da consulta original — que fixa o vencimento mínimo em `'20260301'` —, aqui o período **não é fixo**: é parametrizável via query string.
 
 - `vencimento_de` (opcional): filtra pelo vencimento real (`E2_VENCREA`, formato `AAAAMMDD`), trazendo apenas títulos com `vencimento_real >= vencimento_de`. Sem o parâmetro, assume a data atual do sistema (equivalente a `vencimento_de=<hoje>`).

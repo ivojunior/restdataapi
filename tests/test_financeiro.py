@@ -92,6 +92,30 @@ def test_expoe_recuperacao_judicial(client, auth_headers, db_session):
     assert valores["000003"] is None
 
 
+def test_valor_soma_retencoes_ao_valor_bruto(client, auth_headers, db_session):
+    # Réplica de select_financeiro.sql: E2_VALOR exposto = E2_IRRF + E2_CSLL +
+    # E2_PIS + E2_COFINS + E2_VALOR (coluna bruta), não a coluna bruta sozinha.
+    db_session.add_all([
+        _fornecedor(),
+        _titulo(valor="1000.00", irrf="10.00", csll="20.00", pis="5.00", cofins="15.00"),
+    ])
+    db_session.commit()
+
+    resposta = client.get("/financeiro/", headers=auth_headers)
+    dados = resposta.json()
+    assert len(dados["items"]) == 1
+    assert float(dados["items"][0]["valor"]) == pytest.approx(1050.0)
+
+
+def test_valor_trata_retencoes_nulas_como_zero(client, auth_headers, db_session):
+    db_session.add_all([_fornecedor(), _titulo(valor="1000.00")])
+    db_session.commit()
+
+    resposta = client.get("/financeiro/", headers=auth_headers)
+    dados = resposta.json()
+    assert float(dados["items"][0]["valor"]) == pytest.approx(1000.0)
+
+
 def test_titulo_sem_tipo_operacao_correspondente_ainda_aparece(client, auth_headers, db_session):
     db_session.add_all([_fornecedor(), _titulo(codigo_operacao="999")])
     db_session.commit()
