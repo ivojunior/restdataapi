@@ -86,7 +86,8 @@ TREEVIEW_COLS: List[Tuple[str, str, int, str]] = [
     ("categoria",          "Categoria",     140,  "w"),
     ("emissao",            "Emissão",        85,  "c"),
     ("vencimento_real",    "Vencimento",     85,  "c"),
-    ("valor",              "Valor (R$)",    115,  "e"),
+    ("valor_bruto",        "Valor (R$)",    115,  "e"),
+    ("valor",              "Valor Líquido (R$)", 130, "e"),
     ("saldo",              "Saldo (R$)",    115,  "e"),
     ("historico",          "Histórico",     200,  "w"),
     ("recuperacao_judicial", "Rec. Judicial", 100, "c"),
@@ -659,6 +660,10 @@ class FinanceiroApp:
 
         df = pd.DataFrame(items) if items else pd.DataFrame()
         if not df.empty:
+            # valor_bruto (com retenções) é o total usado em KPIs/gráficos/
+            # resumos, igual ao endpoint; valor (E2_VALOR puro) é só
+            # informativo, exibido como coluna extra na tabela/exportação.
+            df["valor_bruto"] = pd.to_numeric(df["valor_bruto"], errors="coerce").fillna(0.0)
             df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0.0)
             df["saldo"] = pd.to_numeric(df["saldo"], errors="coerce").fillna(0.0)
             df["mes_ano"] = df["vencimento_real"].apply(_mes_ano)
@@ -765,15 +770,15 @@ class FinanceiroApp:
         bx = df[df["status"] == "Baixado"]
 
         self._kpi_vars["total_titulos"].set(f'{len(df):,}'.replace(",", "."))
-        self._kpi_vars["valor_total"].set(_brl(df["valor"].sum()))
-        self._kpi_vars["recuperacao_judicial"].set(_brl(rj["valor"].sum()))
+        self._kpi_vars["valor_total"].set(_brl(df["valor_bruto"].sum()))
+        self._kpi_vars["recuperacao_judicial"].set(_brl(rj["valor_bruto"].sum()))
         self._kpi_vars["saldo_total"].set(_brl(nao_rj["saldo"].sum()))
         self._kpi_vars["em_aberto"].set(
             f'{len(ab):,}'.replace(",", ".") + "\n" + _brl(ab["saldo"].sum()))
         self._kpi_vars["vencidos"].set(
             f'{len(ve):,}'.replace(",", ".") + "\n" + _brl(ve["saldo"].sum()))
         self._kpi_vars["baixados"].set(
-            f'{len(bx):,}'.replace(",", ".") + "\n" + _brl(bx["valor"].sum()))
+            f'{len(bx):,}'.replace(",", ".") + "\n" + _brl(bx["valor_bruto"].sum()))
 
     # ── gráficos ──────────────────────────────────────────────────────────────
 
@@ -925,7 +930,7 @@ class FinanceiroApp:
 
         resumo = (
             df.groupby("categoria", as_index=False)
-            .agg(qtd=("valor", "count"), valor_total=("valor", "sum"))
+            .agg(qtd=("valor_bruto", "count"), valor_total=("valor_bruto", "sum"))
             .sort_values("valor_total", ascending=False)
         )
         total_geral = resumo["valor_total"].sum()
@@ -970,7 +975,7 @@ class FinanceiroApp:
 
         resumo = (
             df.groupby("filial", as_index=False)
-            .agg(qtd=("valor", "count"), valor_total=("valor", "sum"))
+            .agg(qtd=("valor_bruto", "count"), valor_total=("valor_bruto", "sum"))
             .sort_values("valor_total", ascending=False)
         )
         total_geral = resumo["valor_total"].sum()
@@ -1008,7 +1013,7 @@ class FinanceiroApp:
 
         meses = sorted(m for m in df["mes_ano"].unique() if m)
         pivot = (
-            df.groupby(["categoria", "mes_ano"])["valor"].sum()
+            df.groupby(["categoria", "mes_ano"])["valor_bruto"].sum()
             .unstack(fill_value=0.0)
             .reindex(columns=meses, fill_value=0.0)
         )
@@ -1063,8 +1068,8 @@ class FinanceiroApp:
             return
 
         # "Em aberto"/"Vencido" somam saldo (o que ainda falta pagar);
-        # "Baixado" soma valor (já foi pago — saldo normalmente já é 0) —
-        # mesma convenção usada em _update_kpis().
+        # "Baixado" soma valor_bruto (já foi pago — saldo normalmente já é 0)
+        # — mesma convenção usada em _update_kpis().
         #
         # Sem .tail() aqui, de propósito: diferente dos gráficos de "últimos
         # N meses/dias" (que cortariam pelo lado errado — a ordenação é
@@ -1072,7 +1077,7 @@ class FinanceiroApp:
         # não os mais antigos), o volume de dias já é controlado pelos
         # filtros de período (Vencimento De/Até) que o usuário já usa para
         # carregar os dados — mesmo padrão sem limite de "Evolução Mensal".
-        valor_status = df["valor"].where(df["status"] == "Baixado", df["saldo"])
+        valor_status = df["valor_bruto"].where(df["status"] == "Baixado", df["saldo"])
         pivot = (
             df.assign(valor_status=valor_status)
             .groupby(["vencimento_real", "status"])["valor_status"].sum()
@@ -1136,6 +1141,7 @@ class FinanceiroApp:
                 row.get("categoria", ""),
                 _fmt_date(row.get("emissao")),
                 _fmt_date(row.get("vencimento_real")),
+                _brl(row.get("valor_bruto", 0)),
                 _brl(row.get("valor", 0)),
                 _brl(row.get("saldo", 0)),
                 row.get("historico", ""),
@@ -1149,7 +1155,7 @@ class FinanceiroApp:
         asc = not self._sort_ascending.get(col, False)
         self._sort_ascending[col] = asc
 
-        if col in ("valor", "saldo"):
+        if col in ("valor_bruto", "valor", "saldo"):
             self._df = self._df.sort_values(col, ascending=asc, na_position="last")
         else:
             self._df = self._df.sort_values(
@@ -1251,7 +1257,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     BRL       = '#,##0.00'
     PCT       = '0.0%'
     DATE_COLS = {"emissao", "vencimento_real"}
-    CURR_COLS = {"valor", "saldo"}
+    CURR_COLS = {"valor_bruto", "valor", "saldo"}
 
     def _hdr(ws, row, col, text):
         c = ws.cell(row=row, column=col, value=text)
@@ -1278,7 +1284,8 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         ("Emissão",        "emissao",            13),
         ("Vencimento",     "vencimento_real",    13),
         ("Mês/Ano",        "mes_ano",            10),
-        ("Valor (R$)",     "valor",              16),
+        ("Valor (R$)",     "valor_bruto",        16),
+        ("Valor Líquido (R$)", "valor",          16),
         ("Saldo (R$)",     "saldo",              16),
         ("Histórico",      "historico",          42),
         ("Rec. Judicial",  "recuperacao_judicial", 14),
@@ -1331,18 +1338,18 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
     baixado = df[df["status"] == "Baixado"]
 
     items_resumo = [
-        ("Total de Títulos",         len(df),                       None),
-        ("Valor Total (R$)",         float(df["valor"].sum()),      BRL),
-        ("Saldo Total (R$)",         float(df["saldo"].sum()),      BRL),
-        ("",                          "",                            None),
-        ("Em Aberto — Qtd",          len(aberto),                   None),
-        ("Em Aberto — Saldo (R$)",   float(aberto["saldo"].sum()),  BRL),
-        ("",                          "",                            None),
-        ("Vencidos — Qtd",           len(vencido),                  None),
-        ("Vencidos — Saldo (R$)",    float(vencido["saldo"].sum()), BRL),
-        ("",                          "",                            None),
-        ("Baixados — Qtd",           len(baixado),                  None),
-        ("Baixados — Valor (R$)",    float(baixado["valor"].sum()), BRL),
+        ("Total de Títulos",         len(df),                             None),
+        ("Valor Total (R$)",         float(df["valor_bruto"].sum()),      BRL),
+        ("Saldo Total (R$)",         float(df["saldo"].sum()),            BRL),
+        ("",                          "",                                  None),
+        ("Em Aberto — Qtd",          len(aberto),                         None),
+        ("Em Aberto — Saldo (R$)",   float(aberto["saldo"].sum()),        BRL),
+        ("",                          "",                                  None),
+        ("Vencidos — Qtd",           len(vencido),                        None),
+        ("Vencidos — Saldo (R$)",    float(vencido["saldo"].sum()),       BRL),
+        ("",                          "",                                  None),
+        ("Baixados — Qtd",           len(baixado),                        None),
+        ("Baixados — Valor (R$)",    float(baixado["valor_bruto"].sum()), BRL),
     ]
     for i, (lbl, val, fmt) in enumerate(items_resumo, 4):
         c1 = ws2.cell(i, 1, lbl)
@@ -1358,7 +1365,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         df.assign(nome_fornecedor=df["nome_fornecedor"].fillna("(sem nome)"))
         .groupby("nome_fornecedor", as_index=False)
         .agg(qtd=("numero", "count"),
-             valor_total=("valor", "sum"),
+             valor_total=("valor_bruto", "sum"),
              saldo_total=("saldo", "sum"))
         .sort_values("saldo_total", ascending=False)
     )
@@ -1384,7 +1391,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
         df.assign(descricao_operacao=df["descricao_operacao"].fillna("(não informado)"))
         .groupby("descricao_operacao", as_index=False)
         .agg(qtd=("numero", "count"),
-             valor_total=("valor", "sum"),
+             valor_total=("valor_bruto", "sum"),
              saldo_total=("saldo", "sum"))
         .sort_values("saldo_total", ascending=False)
     )
@@ -1413,7 +1420,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
 
     by_cat = (
         df.groupby("categoria", as_index=False)
-        .agg(qtd=("valor", "count"), valor_total=("valor", "sum"))
+        .agg(qtd=("valor_bruto", "count"), valor_total=("valor_bruto", "sum"))
         .sort_values("valor_total", ascending=False)
     )
     total_cat = float(by_cat["valor_total"].sum())
@@ -1455,7 +1462,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
 
     meses = sorted(m for m in df["mes_ano"].unique() if m)
     pivot = (
-        df.groupby(["categoria", "mes_ano"])["valor"].sum()
+        df.groupby(["categoria", "mes_ano"])["valor_bruto"].sum()
         .unstack(fill_value=0.0)
         .reindex(columns=meses, fill_value=0.0)
     )
@@ -1501,7 +1508,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
 
     # Sem o .tail(30) do gráfico da tela (essa aba mostra o período completo
     # carregado — mesmo padrão da aba "Evolução Mensal" acima).
-    valor_status_dia = df["valor"].where(df["status"] == "Baixado", df["saldo"])
+    valor_status_dia = df["valor_bruto"].where(df["status"] == "Baixado", df["saldo"])
     pivot_dia = (
         df.assign(valor_status=valor_status_dia)
         .groupby(["vencimento_real", "status"])["valor_status"].sum()
@@ -1548,7 +1555,7 @@ def _write_excel(df: pd.DataFrame, path: str) -> None:
 
     by_filial = (
         df.groupby("filial", as_index=False)
-        .agg(qtd=("valor", "count"), valor_total=("valor", "sum"))
+        .agg(qtd=("valor_bruto", "count"), valor_total=("valor_bruto", "sum"))
         .sort_values("valor_total", ascending=False)
     )
     total_filial = float(by_filial["valor_total"].sum())

@@ -92,28 +92,34 @@ def test_expoe_recuperacao_judicial(client, auth_headers, db_session):
     assert valores["000003"] is None
 
 
-def test_valor_soma_retencoes_ao_valor_bruto(client, auth_headers, db_session):
-    # Réplica de select_financeiro.sql: E2_VALOR exposto = E2_IRRF + E2_CSLL +
-    # E2_PIS + E2_COFINS + E2_VALOR (coluna bruta), não a coluna bruta sozinha.
+def test_valor_bruto_soma_retencoes_ao_valor(client, auth_headers, db_session):
+    # Réplica de select_financeiro.sql: valor_bruto = E2_ISS + E2_INSS +
+    # E2_IRRF + E2_CSLL + E2_PIS + E2_COFINS + E2_VALOR; "valor" continua
+    # sendo E2_VALOR puro.
     db_session.add_all([
         _fornecedor(),
-        _titulo(valor="1000.00", irrf="10.00", csll="20.00", pis="5.00", cofins="15.00"),
+        _titulo(
+            valor="1000.00", iss="8.00", inss="12.00",
+            irrf="10.00", csll="20.00", pis="5.00", cofins="15.00",
+        ),
     ])
     db_session.commit()
 
     resposta = client.get("/financeiro/", headers=auth_headers)
     dados = resposta.json()
     assert len(dados["items"]) == 1
-    assert float(dados["items"][0]["valor"]) == pytest.approx(1050.0)
+    assert float(dados["items"][0]["valor"]) == pytest.approx(1000.0)
+    assert float(dados["items"][0]["valor_bruto"]) == pytest.approx(1070.0)
 
 
-def test_valor_trata_retencoes_nulas_como_zero(client, auth_headers, db_session):
+def test_valor_bruto_trata_retencoes_nulas_como_zero(client, auth_headers, db_session):
     db_session.add_all([_fornecedor(), _titulo(valor="1000.00")])
     db_session.commit()
 
     resposta = client.get("/financeiro/", headers=auth_headers)
     dados = resposta.json()
     assert float(dados["items"][0]["valor"]) == pytest.approx(1000.0)
+    assert float(dados["items"][0]["valor_bruto"]) == pytest.approx(1000.0)
 
 
 def test_titulo_sem_tipo_operacao_correspondente_ainda_aparece(client, auth_headers, db_session):
@@ -307,16 +313,19 @@ def test_export_gera_planilha_com_8_abas_e_valores_corretos(client, auth_headers
     ]
 
     # Aba "Financeiro": A=Filial B=Número ... G=Fornecedor H=Categoria ...
-    # L=Valor M=Saldo ... P=Status
+    # L=Valor (bruto, com retenções) M=Valor Líquido (E2_VALOR puro) N=Saldo
+    # ... Q=Status
     ws1 = wb["Financeiro"]
     assert ws1["A1"].value == "Filial"
     assert ws1["A2"].value == "01"
     assert ws1["G2"].value == "Fornecedor Exemplo Ltda"
     # sem regra correspondente no fornecedor de teste -> "Não Classificado"
     assert ws1["H2"].value == "Não Classificado"
+    # sem retenções no título de teste -> valor bruto == valor líquido
     assert ws1["L2"].value == pytest.approx(1000.0)
+    assert ws1["M2"].value == pytest.approx(1000.0)
     # vencimento_real = hoje, sem data_baixa -> "Em aberto"
-    assert ws1["P2"].value == "Em aberto"
+    assert ws1["Q2"].value == "Em aberto"
 
     ws2 = wb["Resumo"]
     assert ws2.cell(4, 1).value == "Total de Títulos"

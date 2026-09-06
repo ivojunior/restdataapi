@@ -28,19 +28,19 @@ export function calcularKpis(itens: FinanceiroItemEnriquecido[]): KpisFinanceiro
   const vencidos = naoRj.filter((i) => i.status === 'Vencido')
   const baixados = itens.filter((i) => i.status === 'Baixado')
 
-  const somar = (lista: FinanceiroItemEnriquecido[], campo: 'valor' | 'saldo') =>
+  const somar = (lista: FinanceiroItemEnriquecido[], campo: 'valor_bruto' | 'saldo') =>
     lista.reduce((soma, i) => soma + Number(i[campo]), 0)
 
   return {
     totalTitulos: itens.length,
-    valorTotal: somar(itens, 'valor'),
-    recuperacaoJudicial: somar(rj, 'valor'),
+    valorTotal: somar(itens, 'valor_bruto'),
+    recuperacaoJudicial: somar(rj, 'valor_bruto'),
     saldoTotal: somar(naoRj, 'saldo'),
     emAbertoQtd: emAberto.length,
     emAbertoSaldo: somar(emAberto, 'saldo'),
     vencidosQtd: vencidos.length,
     vencidosSaldo: somar(vencidos, 'saldo'),
     baixadosQtd: baixados.length,
-    baixadosValor: somar(baixados, 'valor'),
+    baixadosValor: somar(baixados, 'valor_bruto'),
   }
 }

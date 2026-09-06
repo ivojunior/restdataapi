@@ -51,7 +51,8 @@ const COLUNAS: ColunaTabela<FinanceiroItemEnriquecido>[] = [
   { chave: 'categoria', titulo: 'Categoria' },
   { chave: 'emissao', titulo: 'Emissão', align: 'center', formatar: (i) => formatarDataBR(i.emissao) },
   { chave: 'vencimento_real', titulo: 'Vencimento', align: 'center', formatar: (i) => formatarDataBR(i.vencimento_real) },
-  { chave: 'valor', titulo: 'Valor (R$)', align: 'right', formatar: (i) => formatarBRL(Number(i.valor)) },
+  { chave: 'valor_bruto', titulo: 'Valor (R$)', align: 'right', formatar: (i) => formatarBRL(Number(i.valor_bruto)) },
+  { chave: 'valor', titulo: 'Valor Líquido (R$)', align: 'right', formatar: (i) => formatarBRL(Number(i.valor)) },
   { chave: 'saldo', titulo: 'Saldo (R$)', align: 'right', formatar: (i) => formatarBRL(Number(i.saldo)) },
   { chave: 'historico', titulo: 'Histórico' },
   {

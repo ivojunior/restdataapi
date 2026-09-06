@@ -115,10 +115,13 @@ _COLUNAS_ABA1 = [
     ("Filial", 7), ("Número", 13), ("Parcela", 9), ("Tipo", 7),
     ("Cód. Operação", 12), ("Tipo Operação", 26), ("Fornecedor", 30),
     ("Categoria", 22), ("Emissão", 13), ("Vencimento", 13), ("Mês/Ano", 10),
-    ("Valor (R$)", 16), ("Saldo (R$)", 16), ("Histórico", 42),
-    ("Rec. Judicial", 14), ("Status", 12),
+    ("Valor (R$)", 16), ("Valor Líquido (R$)", 16), ("Saldo (R$)", 16),
+    ("Histórico", 42), ("Rec. Judicial", 14), ("Status", 12),
 ]
-_COLS_VALOR = (12, 13)  # Valor, Saldo — 1-indexadas
+# Valor (valor_bruto — com retenções, mesmo total já usado nos resumos),
+# Valor Líquido (valor — E2_VALOR puro, nova coluna informativa) e Saldo —
+# 1-indexadas.
+_COLS_VALOR = (12, 13, 14)
 
 
 def _aba_financeiro(ws, linhas: Sequence[_LinhaEnriquecida]) -> None:
@@ -143,7 +146,7 @@ def _aba_financeiro(ws, linhas: Sequence[_LinhaEnriquecida]) -> None:
             item.filial, item.numero, item.parcela, item.tipo, item.codigo_operacao,
             item.descricao_operacao, item.nome_fornecedor, linha.categoria,
             _fmt_data(item.emissao), _fmt_data(item.vencimento_real), _fmt_mes(linha.mes_ano),
-            _num(item.valor), _num(item.saldo), item.historico,
+            _num(item.valor_bruto), _num(item.valor), _num(item.saldo), item.historico,
             _fmt_rec_judicial(item.recuperacao_judicial), linha.status,
         ]
         for ci, valor in enumerate(valores, 1):
@@ -180,7 +183,7 @@ def _aba_resumo(ws, linhas: Sequence[_LinhaEnriquecida]) -> None:
     # não corrigida sem confirmação de que a correção é desejada.
     itens_resumo = [
         ("Total de Títulos", len(linhas), None),
-        ("Valor Total (R$)", sum(_num(l.item.valor) for l in linhas), BRL),
+        ("Valor Total (R$)", sum(_num(l.item.valor_bruto) for l in linhas), BRL),
         ("Saldo Total (R$)", sum(_num(l.item.saldo) for l in linhas), BRL),
         ("", None, None),
         ("Em Aberto — Qtd", len(aberto), None),
@@ -190,7 +193,7 @@ def _aba_resumo(ws, linhas: Sequence[_LinhaEnriquecida]) -> None:
         ("Vencidos — Saldo (R$)", sum(_num(l.item.saldo) for l in vencido), BRL),
         ("", None, None),
         ("Baixados — Qtd", len(baixado), None),
-        ("Baixados — Valor (R$)", sum(_num(l.item.valor) for l in baixado), BRL),
+        ("Baixados — Valor (R$)", sum(_num(l.item.valor_bruto) for l in baixado), BRL),
     ]
     for i, (rotulo, valor, formato) in enumerate(itens_resumo, 4):
         c1 = ws.cell(i, 1, rotulo)
@@ -211,7 +214,7 @@ def _agrupar_qtd_valor_saldo(linhas: Sequence[_LinhaEnriquecida], chave_fn, sem_
         chave = chave_fn(l) or sem_valor
         agg = agregados.setdefault(chave, {"qtd": 0, "valor_total": 0.0, "saldo_total": 0.0})
         agg["qtd"] += 1
-        agg["valor_total"] += _num(l.item.valor)
+        agg["valor_total"] += _num(l.item.valor_bruto)
         agg["saldo_total"] += _num(l.item.saldo)
     return sorted(agregados.items(), key=lambda kv: kv[1]["saldo_total"], reverse=True)
 
@@ -256,7 +259,7 @@ def _aba_resumo_por_categoria(ws, linhas: Sequence[_LinhaEnriquecida]) -> None:
     for l in linhas:
         agg = agregados.setdefault(l.categoria, {"qtd": 0, "valor_total": 0.0})
         agg["qtd"] += 1
-        agg["valor_total"] += _num(l.item.valor)
+        agg["valor_total"] += _num(l.item.valor_bruto)
     ordenados = sorted(agregados.items(), key=lambda kv: kv[1]["valor_total"], reverse=True)
     total_geral = sum(v["valor_total"] for _, v in ordenados)
 
@@ -302,7 +305,7 @@ def _aba_evolucao_mensal(ws, linhas: Sequence[_LinhaEnriquecida]) -> None:
         if not l.mes_ano:
             continue
         linha_pivo = pivo.setdefault(l.categoria, {m: 0.0 for m in meses})
-        linha_pivo[l.mes_ano] += _num(l.item.valor)
+        linha_pivo[l.mes_ano] += _num(l.item.valor_bruto)
     # Categorias presentes na pivô (algumas linhas podem ter mes_ano vazio e
     # nunca entrar aqui, mas ainda assim ter categoria) — inclui todas as
     # categorias que apareceram em pelo menos uma linha com mês válido.
@@ -361,7 +364,7 @@ def _aba_total_por_dia(ws, linhas: Sequence[_LinhaEnriquecida]) -> None:
     for l in linhas:
         linha_pivo = pivo.setdefault(
             l.item.vencimento_real, {s: 0.0 for s in _STATUS_ORDEM})
-        v = _num(l.item.valor) if l.status == "Baixado" else _num(l.item.saldo)
+        v = _num(l.item.valor_bruto) if l.status == "Baixado" else _num(l.item.saldo)
         linha_pivo[l.status] += v
     dias_ordenados = sorted(pivo.items(), key=lambda kv: kv[0] or "")
 
@@ -411,7 +414,7 @@ def _aba_resumo_por_filial(ws, linhas: Sequence[_LinhaEnriquecida]) -> None:
     for l in linhas:
         agg = agregados.setdefault(l.item.filial, {"qtd": 0, "valor_total": 0.0})
         agg["qtd"] += 1
-        agg["valor_total"] += _num(l.item.valor)
+        agg["valor_total"] += _num(l.item.valor_bruto)
     ordenados = sorted(agregados.items(), key=lambda kv: kv[1]["valor_total"], reverse=True)
     total_geral = sum(v["valor_total"] for _, v in ordenados)
 

@@ -24,10 +24,10 @@ export function resumoPorCategoria(itens: FinanceiroItemEnriquecido[]): {
   for (const item of itens) {
     const atual = mapa.get(item.categoria) ?? { qtd: 0, valorTotal: 0 }
     atual.qtd += 1
-    atual.valorTotal += Number(item.valor)
+    atual.valorTotal += Number(item.valor_bruto)
     mapa.set(item.categoria, atual)
   }
-  const totalGeral = itens.reduce((s, i) => s + Number(i.valor), 0)
+  const totalGeral = itens.reduce((s, i) => s + Number(i.valor_bruto), 0)
 
   const linhas = [...mapa.entries()]
     .map(([categoria, { qtd, valorTotal }]) => ({
@@ -69,10 +69,10 @@ export function resumoPorFilial(itens: FinanceiroItemEnriquecido[]): {
   for (const item of itens) {
     const atual = mapa.get(item.filial) ?? { qtd: 0, valorTotal: 0 }
     atual.qtd += 1
-    atual.valorTotal += Number(item.valor)
+    atual.valorTotal += Number(item.valor_bruto)
     mapa.set(item.filial, atual)
   }
-  const totalGeral = itens.reduce((s, i) => s + Number(i.valor), 0)
+  const totalGeral = itens.reduce((s, i) => s + Number(i.valor_bruto), 0)
 
   const linhas = [...mapa.entries()]
     .map(([filial, { qtd, valorTotal }]) => ({
@@ -100,14 +100,14 @@ export interface ResumoEvolucao {
 
 /** Réplica de `_update_evolucao_view` — pivô categoria x mês (tabela) e o
  * inverso, mês x categoria empilhado (gráfico), a partir da mesma
- * agregação `categoria x mesAno -> soma(valor)`. */
+ * agregação `categoria x mesAno -> soma(valor_bruto)`. */
 export function resumoEvolucaoMensal(itens: FinanceiroItemEnriquecido[]): ResumoEvolucao {
   const meses = [...new Set(itens.map((i) => i.mesAno).filter(Boolean))].sort()
   const porCategoriaMes = new Map<string, Map<string, number>>()
   for (const item of itens) {
     if (!item.mesAno) continue
     const porMes = porCategoriaMes.get(item.categoria) ?? new Map<string, number>()
-    porMes.set(item.mesAno, (porMes.get(item.mesAno) ?? 0) + Number(item.valor))
+    porMes.set(item.mesAno, (porMes.get(item.mesAno) ?? 0) + Number(item.valor_bruto))
     porCategoriaMes.set(item.categoria, porMes)
   }
 
@@ -161,8 +161,8 @@ export interface ResumoDia {
 const STATUS_PIVO = ['Em aberto', 'Vencido', 'Baixado'] as const
 
 /** Réplica de `_update_dia_view` — "Em aberto"/"Vencido" somam saldo,
- * "Baixado" soma valor (mesma convenção de calcularKpis), pivotado por dia
- * de vencimento. Sem corte de "últimos N dias", de propósito (mesmo
+ * "Baixado" soma valor_bruto (mesma convenção de calcularKpis), pivotado
+ * por dia de vencimento. Sem corte de "últimos N dias", de propósito (mesmo
  * comentário do original): o volume já é limitado pelo filtro de período
  * do servidor. */
 export function resumoTotalPorDia(itens: FinanceiroItemEnriquecido[]): ResumoDia {
@@ -170,7 +170,7 @@ export function resumoTotalPorDia(itens: FinanceiroItemEnriquecido[]): ResumoDia
   for (const item of itens) {
     const dia = item.vencimento_real
     const registro = porDia.get(dia) ?? { 'Em aberto': 0, Vencido: 0, Baixado: 0 }
-    const valorConsiderado = item.status === 'Baixado' ? Number(item.valor) : Number(item.saldo)
+    const valorConsiderado = item.status === 'Baixado' ? Number(item.valor_bruto) : Number(item.saldo)
     registro[item.status] += valorConsiderado
     porDia.set(dia, registro)
   }

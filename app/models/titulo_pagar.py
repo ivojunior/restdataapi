@@ -29,9 +29,12 @@ class TituloPagar(Base):
     vencimento = Column("E2_VENCTO", String(8))
     vencimento_real = Column("E2_VENCREA", String(8))
     valor = Column("E2_VALOR", Numeric(18, 2))
-    # Componentes de retenção/tributo somados a E2_VALOR para compor o "valor"
-    # exposto pela API (ver select_financeiro.sql e _montar_items em
-    # app/routers/financeiro.py) — não são expostos como campos próprios.
+    # Componentes de retenção/tributo somados a E2_VALOR para compor o
+    # "valor_bruto" exposto pela API (ver select_financeiro.sql e
+    # _montar_items em app/routers/financeiro.py) — não são expostos como
+    # campos próprios.
+    iss = Column("E2_ISS", Numeric(18, 2))
+    inss = Column("E2_INSS", Numeric(18, 2))
     irrf = Column("E2_IRRF", Numeric(18, 2))
     csll = Column("E2_CSLL", Numeric(18, 2))
     pis = Column("E2_PIS", Numeric(18, 2))

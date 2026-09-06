@@ -9,7 +9,11 @@ export interface FinanceiroItem {
   tipo: string
   codigo_operacao: string | null
   descricao_operacao: string | null
+  // valor = E2_VALOR puro (sem retenções). valor_bruto = valor + ISS/INSS/
+  // IRRF/CSLL/PIS/COFINS (calculado em app/routers/financeiro.py) — é o
+  // total usado em KPIs/resumos/gráficos; valor é só informativo.
   valor: string
+  valor_bruto: string
   saldo: string
   emissao: string
   vencimento_real: string
