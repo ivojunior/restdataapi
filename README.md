@@ -170,7 +170,7 @@ A resposta paginada (`{"skip", "limit", "items"}`) não inclui um total de regis
 Baseado no `SELECT` de `select_financeiro.sql`: junta `SE2070` (títulos a pagar) com `SA2070` (fornecedor, join obrigatório — títulos sem fornecedor cadastrado na filial `"  "` não aparecem) e `PA6000` (tipo de operação, join opcional — `descricao_operacao` vem `null` quando não há correspondência). Aplica como regra de negócio fixa (sempre ativa):
 
 - Apenas títulos não excluídos (`D_E_L_E_T_ != '*'`);
-- `tipo` fora de `PA`, `PR`, `NDF`.
+- `tipo` fora de `PR`, `NDF`; títulos `PA` só entram enquanto em aberto (sem `E2_BAIXA`).
 
 A resposta traz dois campos de valor, réplica das duas colunas hoje presentes em `select_financeiro.sql` (`E2_VALOR` e `VALOR_BRUTO`): `valor` é a coluna bruta `E2_VALOR`, sem nenhum cálculo; `valor_bruto` é a soma dela com as retenções/tributos do título — `E2_ISS + E2_INSS + E2_IRRF + E2_CSLL + E2_PIS + E2_COFINS + E2_VALOR`. Essas seis colunas (`iss`/`inss`/`irrf`/`csll`/`pis`/`cofins`) foram adicionadas a `TituloPagar` (`app/models/titulo_pagar.py`) só para esse cálculo — não são expostas como campos próprios da resposta. `saldo` continua vindo direto de `E2_SALDO`, sem soma. Colunas nulas nessa soma são tratadas como `0` (não como `NULL`, diferente do comportamento do SQL Server), para que `valor_bruto` continue sempre não-nulo. `valor_bruto` é o total usado em todos os KPIs/resumos/gráficos (na API, no Excel, no client desktop e na SPA) — `valor` é informativo, exposto só como coluna extra na listagem/exportação.
 

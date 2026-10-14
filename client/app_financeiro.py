@@ -4,8 +4,8 @@ Cliente desktop para a RestDataAPI — Relatório Financeiro (endpoint /financei
 Exibe filtros, KPIs, gráficos analíticos, resumos por categoria/mês/filial
 (mesma visão de CONTAS_A_PAGAR_ANALISE.xlsx) e exporta tudo para Excel.
 
-O endpoint /financeiro exclui sempre os tipos de título PA/PR/NDF (regra
-fixa). O período de vencimento (vencimento_de/vencimento_ate) e o status
+O endpoint /financeiro exclui sempre os tipos de título PR/NDF e os do tipo
+PA já baixados (regra fixa — PA em aberto entra). O período de vencimento (vencimento_de/vencimento_ate) e o status
 ("Em aberto"/"Vencido"/"Baixado") são enviados à API como query string — os
 filtros "Vencimento De" e "Vencimento Até" já iniciam marcados com a data
 atual do sistema (mesmo padrão que a API assume quando o parâmetro não é

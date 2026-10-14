@@ -52,8 +52,8 @@ class APIClient:
     ) -> List[Dict]:
         """Busca todas as páginas do relatório financeiro.
 
-        O endpoint /financeiro exclui sempre os tipos de título PA/PR/NDF
-        (regra fixa). O período (vencimento_de/vencimento_ate) é
+        O endpoint /financeiro exclui sempre os tipos de título PR/NDF e
+        os do tipo PA já baixados (regra fixa — PA em aberto entra). O período (vencimento_de/vencimento_ate) é
         parametrizável — sem vencimento_de, a API assume a data atual do
         sistema; sem vencimento_ate, não há limite superior. `status`
         ("em_aberto", "vencido" ou "baixado") filtra pelo mesmo status

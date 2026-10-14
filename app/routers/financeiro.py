@@ -25,9 +25,11 @@ router = APIRouter(
 )
 
 # Regra de negócio fixa do relatório (réplica de select_financeiro.sql): exclui
-# os tipos de lançamento PA/PR/NDF. O período de vencimento não é mais fixo —
-# é parametrizável via query string (vencimento_de/vencimento_ate).
-_TIPOS_EXCLUIDOS = ("PA", "PR", "NDF")
+# sempre os tipos de lançamento PR/NDF; o tipo PA (pagamento antecipado) só
+# entra enquanto estiver em aberto (sem data de baixa). O período de vencimento
+# não é mais fixo — é parametrizável via query string (vencimento_de/vencimento_ate).
+_TIPOS_EXCLUIDOS = ("PR", "NDF")
+_TIPO_PA = "PA"
 
 
 class StatusFinanceiro(str, enum.Enum):
@@ -74,6 +76,12 @@ def _query_financeiro(
             TituloPagar.deletado != "*",
             TituloPagar.vencimento_real >= vencimento_de,
             TituloPagar.tipo.notin_(_TIPOS_EXCLUIDOS),
+            # E2_TIPO é CHAR(3) no Protheus ('PA '): rtrim para não depender
+            # do padding na comparação.
+            or_(
+                func.rtrim(TituloPagar.tipo) != _TIPO_PA,
+                _sem_baixa(TituloPagar.data_baixa),
+            ),
         )
     )
     if vencimento_ate:

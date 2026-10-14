@@ -145,7 +145,6 @@ def test_tipos_excluidos_sao_ignorados(client, auth_headers, db_session):
         [
             _fornecedor(),
             _titulo(numero="000001", tipo="NF"),
-            _titulo(numero="000002", tipo="PA"),
             _titulo(numero="000003", tipo="PR"),
             _titulo(numero="000004", tipo="NDF"),
         ]
@@ -156,6 +155,29 @@ def test_tipos_excluidos_sao_ignorados(client, auth_headers, db_session):
     dados = resposta.json()
     assert len(dados["items"]) == 1
     assert dados["items"][0]["numero"] == "000001"
+
+
+def test_tipo_pa_so_aparece_em_aberto(client, auth_headers, db_session):
+    # E2_TIPO é CHAR(3) no Protheus: o PA vem como 'PA ' (com padding).
+    hoje = date.today().strftime("%Y%m%d")
+    db_session.add_all(
+        [
+            _fornecedor(),
+            _titulo(numero="000001", tipo="PA ", data_baixa=""),
+            _titulo(numero="000002", tipo="PA ", data_baixa="        "),
+            _titulo(numero="000003", tipo="PA ", data_baixa=hoje),
+            _titulo(numero="000004", tipo="NF", data_baixa=hoje),
+        ]
+    )
+    db_session.commit()
+
+    resposta = client.get("/financeiro/", headers=auth_headers)
+    numeros = sorted(item["numero"] for item in resposta.json()["items"])
+    assert numeros == ["000001", "000002", "000004"]
+
+    resposta = client.get("/financeiro/?status=baixado", headers=auth_headers)
+    numeros = [item["numero"] for item in resposta.json()["items"]]
+    assert numeros == ["000004"]
 
 
 def test_sem_filtro_ignora_vencimento_anterior_a_hoje(client, auth_headers, db_session):
